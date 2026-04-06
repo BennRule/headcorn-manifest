@@ -348,6 +348,107 @@ body {
   font-weight: 500;
 }
 
+/* Weight bar */
+.weight-bar-wrap {
+  padding: 0 16px 8px;
+  border-bottom: 1px solid var(--slate-100);
+}
+
+.weight-bar-labels {
+  display: flex;
+  justify-content: space-between;
+  font-family: 'DM Mono', monospace;
+  font-size: 11px;
+  color: var(--slate-400);
+  margin-bottom: 3px;
+}
+
+.weight-bar {
+  height: 6px;
+  background: var(--slate-100);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.weight-bar-fill {
+  height: 100%;
+  border-radius: 3px;
+  background: var(--green-500);
+  transition: width 0.3s;
+}
+
+.weight-bar-fill.warn { background: var(--amber-500); }
+.weight-bar-fill.danger { background: var(--red-500); }
+
+/* Team group */
+.team-group {
+  margin-top: 6px;
+  margin-bottom: 4px;
+  padding: 4px 8px;
+  background: var(--slate-50);
+  border-radius: 4px;
+  border-left: 3px solid var(--slate-300);
+}
+
+.team-group-name {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 600;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--slate-400);
+  margin-bottom: 2px;
+}
+
+/* Arrival time */
+.arrival-time {
+  font-family: 'DM Mono', monospace;
+  font-size: 11px;
+  color: var(--slate-400);
+}
+
+/* Conditions warning */
+.tag-condition {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+/* Declined badge */
+.tag-declined {
+  background: #fee2e2;
+  color: #991b1b;
+  text-decoration: line-through;
+}
+
+/* Map */
+.map-container {
+  width: 300px;
+  height: 220px;
+  background: var(--slate-100);
+  border-radius: 8px;
+  margin: 16px 24px;
+  position: relative;
+  overflow: hidden;
+  border: 1px solid var(--slate-200);
+}
+
+.map-canvas {
+  width: 100%;
+  height: 100%;
+}
+
+.map-label {
+  position: absolute;
+  bottom: 6px;
+  left: 8px;
+  font-family: 'DM Mono', monospace;
+  font-size: 10px;
+  color: var(--slate-400);
+  background: rgba(255,255,255,0.8);
+  padding: 1px 4px;
+  border-radius: 3px;
+}
+
 /* Main layout */
 .main {
   display: flex;
@@ -847,6 +948,10 @@ body {
     <div class="sidebar-list" id="sidebarList">
       <div class="empty-state">No active tandems</div>
     </div>
+    <div style="padding:12px 16px;">
+      <canvas id="dzMap" class="map-canvas" width="268" height="200" style="border-radius:6px;background:var(--slate-100);width:100%;"></canvas>
+      <div id="mapLabel" style="font-family:'DM Mono',monospace;font-size:10px;color:var(--slate-400);margin-top:4px;text-align:center;"></div>
+    </div>
   </aside>
 </div>
 
@@ -922,6 +1027,7 @@ body {
   let viewFilter = 'active'; // 'active' or 'all'
   let planesMap = {};       // planeId → { registration, planeName, maxWeightInLbs, capacity }
   let aircraftLive = {};    // registration → { alt_baro, gs, baro_rate, lat, lon, on_ground, seen }
+  let dzInfo = null;        // { lat, lon, name } from /dropzones
 
   // --- DOM refs ---
   const $clock = document.getElementById('clock');
@@ -981,10 +1087,12 @@ body {
       var manifestUrl = BASE_URL + '/manifests?dropzone_id=' + config.dzId;
       var weatherUrl = BASE_URL + '/calendar/weather-holds?dropzone_id=' + config.dzId + '&date=' + todayStr();
       var planesUrl = BASE_URL + '/planes?dropzone_id=' + config.dzId;
-      const [manifestRes, weatherRes, planesRes] = await Promise.all([
+      var dzUrl = BASE_URL + '/dropzones';
+      const [manifestRes, weatherRes, planesRes, dzRes] = await Promise.all([
         fetch(proxy + encodeURIComponent(manifestUrl), { headers: headers() }),
         fetch(proxy + encodeURIComponent(weatherUrl), { headers: headers() }),
-        fetch(proxy + encodeURIComponent(planesUrl), { headers: headers() })
+        fetch(proxy + encodeURIComponent(planesUrl), { headers: headers() }),
+        !dzInfo ? fetch(proxy + encodeURIComponent(dzUrl), { headers: headers() }).catch(function() { return null; }) : Promise.resolve(null)
       ]);
 
       if (!manifestRes.ok) throw new Error('Manifest API returned ' + manifestRes.status);
@@ -1007,6 +1115,17 @@ body {
             };
           }
         });
+      }
+
+      // Build DZ info (once)
+      if (!dzInfo && dzRes && dzRes.ok) {
+        try {
+          var dzData = await dzRes.json();
+          var myDz = (dzData.dropzoneCollection || []).find(function(d) { return d.id === config.dzId; });
+          if (myDz) {
+            dzInfo = { lat: myDz.gpsLatitude, lon: myDz.gpsLongitude, name: myDz.dropzoneName };
+          }
+        } catch(e) {}
       }
 
       const today = todayStr();
@@ -1091,6 +1210,7 @@ body {
     aircraftLive = newLive;
     renderAircraft();
     renderLoads(); // Re-render cards with live alt
+    renderMap(); // Update aircraft positions on map
   }
 
   // --- Sort order ---
@@ -1137,6 +1257,7 @@ body {
     renderAircraft();
     renderLoads();
     renderSidebar();
+    renderMap();
     renderLastUpdated();
   }
 
@@ -1294,18 +1415,32 @@ body {
       if (takeoff) timeStr += takeoff;
       if (landed) timeStr += (timeStr ? ' &rarr; ' : '') + landed;
 
-      // Tandems
+      // Tandems — grouped by team
       var tandemCustomers = customers.filter(function(c) { return c.customerRole === 'tandem'; });
       var tandemHtml = '';
       if (tandemCustomers.length > 0) {
         tandemHtml = '<div class="section-label">Tandems</div>';
+
+        // Group by team
+        var teamMap = {};
+        var noTeam = [];
         tandemCustomers.forEach(function(cust) {
+          if (cust.teamName) {
+            if (!teamMap[cust.teamName]) teamMap[cust.teamName] = [];
+            teamMap[cust.teamName].push(cust);
+          } else {
+            noTeam.push(cust);
+          }
+        });
+
+        function renderTandemRow(cust) {
           var setColleagues = findBySetEid(colleagues, cust.setEid);
           var instructor = setColleagues.find(function(c) { return c.colleagueRole === 'tandemInstructor' || c.colleagueRole === 'tandemInstructorWithHandcam'; });
           var videographer = setColleagues.find(function(c) { return c.colleagueRole === 'tandemVideographer'; });
           var custSet = sets.find(function(s) { return s.eid === cust.setEid; });
           var custAlt = custSet ? fmtAlt(custSet.jumpAltitudeInFt) : '';
           var isHandcam = instructor && instructor.colleagueRole === 'tandemInstructorWithHandcam';
+          var skydiveResult = custSet ? custSet.skydiveResult : null;
 
           var crewParts = [];
           if (instructor) crewParts.push(esc(instructor.fullName));
@@ -1315,17 +1450,29 @@ body {
           if (custAlt) tags += '<span class="tag tag-alt">' + custAlt + '</span>';
           if (isHandcam) tags += '<span class="tag tag-hc">HC</span>';
           if (videographer) tags += '<span class="tag tag-ff">FF</span>';
+          if (skydiveResult === 'declined') tags += '<span class="tag tag-declined">Declined</span>';
+          if (cust.skydiveConditions) tags += '<span class="tag tag-condition" title="' + esc(cust.skydiveConditions) + '">' + esc(cust.skydiveConditions) + '</span>';
+          if (cust.evaluationConditions) tags += '<span class="tag tag-note" title="' + esc(cust.evaluationConditions) + '">' + esc(cust.evaluationConditions) + '</span>';
           if (!cust.fitSignatureFileLocation) tags += '<span class="tag tag-nosig">No sig</span>';
           if (cust.prominantNote) tags += '<span class="tag tag-note" title="' + esc(cust.prominantNote) + '">' + esc(cust.prominantNote) + '</span>';
 
-          tandemHtml += '<div class="tandem-row">' +
+          return '<div class="tandem-row">' +
             '<div class="tandem-info">' +
               '<div class="tandem-customer">' + esc(cust.fullName) + '</div>' +
               (crewParts.length ? '<div class="tandem-crew">' + crewParts.join(' &bull; ') + '</div>' : '') +
             '</div>' +
             '<div class="tandem-tags">' + tags + '</div>' +
           '</div>';
+        }
+
+        // Render teams first
+        Object.keys(teamMap).forEach(function(team) {
+          tandemHtml += '<div class="team-group"><div class="team-group-name">' + esc(team) + '</div>';
+          teamMap[team].forEach(function(cust) { tandemHtml += renderTandemRow(cust); });
+          tandemHtml += '</div>';
         });
+        // Then ungrouped
+        noTeam.forEach(function(cust) { tandemHtml += renderTandemRow(cust); });
       }
 
       // Sports — colleagues (sportsSolo) and customers (sports role)
@@ -1362,29 +1509,54 @@ body {
           '</div>';
         });
 
-        // Sports customers (club jumpers)
+        // Sports customers (club jumpers) — grouped by team
+        var sportTeamMap = {};
+        var sportNoTeam = [];
         sportsCustomers.forEach(function(cust) {
+          if (cust.teamName) {
+            if (!sportTeamMap[cust.teamName]) sportTeamMap[cust.teamName] = [];
+            sportTeamMap[cust.teamName].push(cust);
+          } else {
+            sportNoTeam.push(cust);
+          }
+        });
+
+        function renderSportCustomerRow(cust) {
           var custSet = sets.find(function(s) { return s.eid === cust.setEid; });
           var custAlt = custSet ? fmtAlt(custSet.jumpAltitudeInFt) : '';
           var bpa = cust.bpaLicenseType;
           var bpaBadge = bpa ? '<span class="tag tag-bpa tag-bpa-' + bpa + '">' + bpa.toUpperCase() + '</span>' : '';
+          var skydiveResult = custSet ? custSet.skydiveResult : null;
 
           var details = [];
           if (cust.weightInLbs) details.push('<span>' + cust.weightInLbs + ' lbs</span>');
+          if (cust.arrivalTime) details.push('<span class="arrival-time">Arr ' + cust.arrivalTime.substring(0, 5) + '</span>');
 
           var tags = '';
           if (custAlt) tags += '<span class="tag tag-alt">' + custAlt + '</span>';
+          if (skydiveResult === 'declined') tags += '<span class="tag tag-declined">Declined</span>';
+          if (cust.skydiveConditions) tags += '<span class="tag tag-condition" title="' + esc(cust.skydiveConditions) + '">' + esc(cust.skydiveConditions) + '</span>';
+          if (cust.evaluationConditions) tags += '<span class="tag tag-note" title="' + esc(cust.evaluationConditions) + '">' + esc(cust.evaluationConditions) + '</span>';
           if (cust.prominantNote) tags += '<span class="tag tag-note" title="' + esc(cust.prominantNote) + '">' + esc(cust.prominantNote) + '</span>';
           if (!cust.fitSignatureFileLocation) tags += '<span class="tag tag-nosig">No sig</span>';
 
-          sportsHtml += '<div class="sport-row">' +
+          return '<div class="sport-row">' +
             '<div class="sport-info">' +
               '<div class="sport-name">' + esc(cust.fullName) + '</div>' +
               (details.length ? '<div class="sport-detail">' + details.join('') + '</div>' : '') +
             '</div>' +
             '<div class="sport-tags">' + bpaBadge + tags + '</div>' +
           '</div>';
+        }
+
+        // Render sport teams first
+        Object.keys(sportTeamMap).forEach(function(team) {
+          sportsHtml += '<div class="team-group"><div class="team-group-name">' + esc(team) + '</div>';
+          sportTeamMap[team].forEach(function(cust) { sportsHtml += renderSportCustomerRow(cust); });
+          sportsHtml += '</div>';
         });
+        // Then ungrouped
+        sportNoTeam.forEach(function(cust) { sportsHtml += renderSportCustomerRow(cust); });
       }
 
       var hasBody = tandemHtml || sportsHtml;
@@ -1403,6 +1575,17 @@ body {
         }
       }
 
+      // Weight bar
+      var weightBarHtml = '';
+      if (m.maxWeightInLbs && m.assignedWeightInLbs) {
+        var pct = Math.min(100, Math.round((m.assignedWeightInLbs / m.maxWeightInLbs) * 100));
+        var fillClass = 'weight-bar-fill' + (pct > 95 ? ' danger' : pct > 80 ? ' warn' : '');
+        weightBarHtml = '<div class="weight-bar-wrap">' +
+          '<div class="weight-bar-labels"><span>' + m.assignedWeightInLbs.toLocaleString() + ' / ' + m.maxWeightInLbs.toLocaleString() + ' lbs</span><span>' + pct + '%</span></div>' +
+          '<div class="weight-bar"><div class="' + fillClass + '" style="width:' + pct + '%"></div></div>' +
+        '</div>';
+      }
+
       return '<div class="load-card" data-status="' + statusClass + '">' +
         '<div class="card-header">' +
           '<span class="lift-number">' + (m.liftNumber != null ? 'Lift #' + m.liftNumber : 'Unscheduled') + '</span>' +
@@ -1415,6 +1598,7 @@ body {
             '<span class="jumper-count"><svg viewBox="0 0 24 24"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/></svg> ' + totalJumpers + '</span>' +
           '</div>' +
         '</div>' +
+        weightBarHtml +
         (hasBody ? '<div class="card-body">' + sportsHtml + tandemHtml + '</div>' : '') +
       '</div>';
     }).join('');
@@ -1451,6 +1635,92 @@ body {
         (badges ? '<div class="sidebar-badges">' + badges + '</div>' : '') +
       '</div>';
     }).join('');
+  }
+
+  function renderMap() {
+    var canvas = document.getElementById('dzMap');
+    var label = document.getElementById('mapLabel');
+    if (!canvas || !dzInfo) { if (label) label.textContent = ''; return; }
+    var ctx = canvas.getContext('2d');
+    var w = canvas.width;
+    var h = canvas.height;
+    var dzLat = dzInfo.lat;
+    var dzLon = dzInfo.lon;
+
+    // Map extent: ~5nm around DZ (approx 0.08 degrees)
+    var range = 0.08;
+
+    function toXY(lat, lon) {
+      var x = ((lon - dzLon) / (range * 2) + 0.5) * w;
+      var y = (1 - ((lat - dzLat) / (range * 2) + 0.5)) * h;
+      return [x, y];
+    }
+
+    // Clear
+    ctx.fillStyle = '#f1f5f9';
+    ctx.fillRect(0, 0, w, h);
+
+    // Grid lines
+    ctx.strokeStyle = '#e2e8f0';
+    ctx.lineWidth = 0.5;
+    for (var i = 0; i <= 4; i++) {
+      var gx = (w / 4) * i;
+      ctx.beginPath(); ctx.moveTo(gx, 0); ctx.lineTo(gx, h); ctx.stroke();
+      var gy = (h / 4) * i;
+      ctx.beginPath(); ctx.moveTo(0, gy); ctx.lineTo(w, gy); ctx.stroke();
+    }
+
+    // DZ marker (centre cross + circle)
+    var dzXY = toXY(dzLat, dzLon);
+    ctx.strokeStyle = '#ef4444';
+    ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(dzXY[0], dzXY[1], 8, 0, Math.PI * 2); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(dzXY[0] - 12, dzXY[1]); ctx.lineTo(dzXY[0] + 12, dzXY[1]); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(dzXY[0], dzXY[1] - 12); ctx.lineTo(dzXY[0], dzXY[1] + 12); ctx.stroke();
+
+    // DZ label
+    ctx.fillStyle = '#64748b';
+    ctx.font = '600 10px "Barlow Condensed", sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(dzInfo.name.toUpperCase(), dzXY[0], dzXY[1] + 22);
+
+    // Aircraft
+    var acCount = 0;
+    Object.keys(aircraftLive).forEach(function(reg) {
+      var ac = aircraftLive[reg];
+      if (!ac || !ac.lat || !ac.lon || ac.on_ground) return;
+      var xy = toXY(ac.lat, ac.lon);
+      if (xy[0] < -20 || xy[0] > w + 20 || xy[1] < -20 || xy[1] > h + 20) return;
+      acCount++;
+
+      var status = getAircraftStatus(reg);
+      var color = status.state === 'climbing' ? '#22c55e' : status.state === 'run-in' ? '#ef4444' : status.state === 'descending' ? '#f59e0b' : '#3b82f6';
+
+      // Draw aircraft icon (triangle pointing in track direction)
+      var track = (ac.track || 0) * Math.PI / 180;
+      ctx.save();
+      ctx.translate(xy[0], xy[1]);
+      ctx.rotate(track);
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      ctx.moveTo(0, -8);
+      ctx.lineTo(-5, 6);
+      ctx.lineTo(5, 6);
+      ctx.closePath();
+      ctx.fill();
+      ctx.restore();
+
+      // Label
+      ctx.fillStyle = color;
+      ctx.font = '700 9px "Barlow Condensed", sans-serif';
+      ctx.textAlign = 'left';
+      var altText = status.alt ? Math.round(status.alt / 100) + '' : '';
+      ctx.fillText(reg + (altText ? ' ' + altText : ''), xy[0] + 8, xy[1] + 3);
+    });
+
+    if (label) {
+      label.textContent = acCount > 0 ? acCount + ' aircraft tracked' : 'No aircraft in range';
+    }
   }
 
   function renderLastUpdated() {
