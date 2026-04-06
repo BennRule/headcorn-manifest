@@ -393,16 +393,48 @@ body {
 
 .sport-row {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 8px;
-  padding: 4px 0;
+  padding: 5px 0;
   border-bottom: 1px solid var(--slate-50);
   font-size: 14px;
 }
 
 .sport-row:last-child { border-bottom: none; }
 
-.sport-name { flex: 1; font-weight: 500; }
+.sport-info { flex: 1; min-width: 0; }
+
+.sport-name { font-weight: 600; color: var(--slate-800); }
+
+.sport-detail {
+  font-size: 12px;
+  color: var(--slate-500);
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 1px;
+}
+
+.sport-detail span { white-space: nowrap; }
+
+.sport-tags {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.tag-jm {
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+
+.tag-cam {
+  background: #f0fdf4;
+  color: #166534;
+}
 
 /* Sidebar */
 .sidebar {
@@ -1004,10 +1036,26 @@ body {
           var colAlt = colSet ? fmtAlt(colSet.jumpAltitudeInFt) : '';
           var bpa = col.bpaLicenseType;
           var bpaBadge = bpa ? '<span class="tag tag-bpa tag-bpa-' + bpa + '">' + bpa.toUpperCase() + '</span>' : '';
+
+          // Detail line
+          var details = [];
+          var totalWeight = (col.weightInLbs || 0) + (col.equipmentWeightInLbs || 0);
+          if (totalWeight) details.push('<span>' + totalWeight + ' lbs</span>');
+          if (col.jumpMasterSeniority > 0) details.push('<span>JM ' + col.jumpMasterSeniority + '</span>');
+
+          // Tags
+          var tags = '';
+          if (colAlt) tags += '<span class="tag tag-alt">' + colAlt + '</span>';
+          if (col.cameraName) tags += '<span class="tag tag-cam">' + esc(col.cameraName) + '</span>';
+          if (colSet && colSet.specialWarning) tags += '<span class="tag tag-note" title="' + esc(colSet.specialWarning) + '">' + esc(colSet.specialWarning) + '</span>';
+          if (!col.fitSignatureFileLocation) tags += '<span class="tag tag-nosig">No sig</span>';
+
           sportsHtml += '<div class="sport-row">' +
-            '<span class="sport-name">' + esc(col.fullName) + '</span>' +
-            bpaBadge +
-            (colAlt ? '<span class="tag tag-alt">' + colAlt + '</span>' : '') +
+            '<div class="sport-info">' +
+              '<div class="sport-name">' + esc(col.fullName) + '</div>' +
+              (details.length ? '<div class="sport-detail">' + details.join('') + '</div>' : '') +
+            '</div>' +
+            '<div class="sport-tags">' + bpaBadge + tags + '</div>' +
           '</div>';
         });
       }
