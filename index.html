@@ -190,6 +190,39 @@ body {
   font-size: 14px;
 }
 
+/* Filter bar */
+.filter-bar {
+  padding: 8px 24px;
+  background: white;
+  border-bottom: 1px solid var(--slate-200);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.filter-btn {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 600;
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 5px 14px;
+  border-radius: 4px;
+  border: 1px solid var(--slate-200);
+  background: white;
+  color: var(--slate-500);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.filter-btn:hover { background: var(--slate-50); color: var(--slate-700); }
+
+.filter-btn.active {
+  background: var(--slate-900);
+  color: white;
+  border-color: var(--slate-900);
+}
+
 /* Main layout */
 .main {
   display: flex;
@@ -630,6 +663,12 @@ body {
   <div class="banner banner-error" id="errorBanner"></div>
 </div>
 
+<!-- Filter bar -->
+<div class="filter-bar">
+  <button class="filter-btn active" data-filter="active">Active</button>
+  <button class="filter-btn" data-filter="all">All Loads</button>
+</div>
+
 <!-- Main content -->
 <div class="main">
   <div class="loads-area">
@@ -718,6 +757,7 @@ body {
   let weatherHold = false;
   let wallboardMsg = null;
   let lastUpdateTime = null;
+  let viewFilter = 'active'; // 'active' or 'all'
 
   // --- DOM refs ---
   const $clock = document.getElementById('clock');
@@ -891,8 +931,14 @@ body {
 
   function renderLoads() {
     var sorted = sortManifests(manifests);
+    if (viewFilter === 'active') {
+      sorted = sorted.filter(function(m) {
+        return m.manifestStatus !== 'landedComplete' && m.manifestStatus !== 'draft';
+      });
+    }
     if (sorted.length === 0) {
-      $loadsGrid.innerHTML = '<div class="empty-state">No loads for today</div>';
+      var msg = viewFilter === 'active' ? 'No active loads — switch to "All Loads" to see landed lifts' : 'No loads for today';
+      $loadsGrid.innerHTML = '<div class="empty-state">' + msg + '</div>';
       return;
     }
 
@@ -1057,6 +1103,16 @@ body {
 
   $modal.addEventListener('click', function(e) {
     if (e.target === $modal) $modal.classList.remove('open');
+  });
+
+  // --- Filter buttons ---
+  document.querySelectorAll('.filter-btn').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      viewFilter = this.getAttribute('data-filter');
+      document.querySelectorAll('.filter-btn').forEach(function(b) { b.classList.remove('active'); });
+      this.classList.add('active');
+      renderLoads();
+    });
   });
 
   // --- Refresh ---
