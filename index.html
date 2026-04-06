@@ -1817,7 +1817,7 @@ body {
     var endTileY = Math.floor((oy + h) / tileSize);
 
     // Clear with base colour
-    ctx.fillStyle = '#e8e0d8';
+    ctx.fillStyle = '#1a2e1a';
     ctx.fillRect(0, 0, w, h);
 
     // Draw cached tiles
@@ -1832,30 +1832,17 @@ body {
           // Load tile
           var img = new Image();
           img.crossOrigin = 'anonymous';
-          img.src = 'https://tile.openstreetmap.org/' + key + '.png';
+          img.src = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/' + zoom + '/' + ty + '/' + tx;
           mapTilesLoaded[key] = img;
           img.onload = function() { renderMap(); }; // Re-render when loaded
         }
       }
     }
 
-    // DZ marker (crosshair)
+    // DZ marker — small dot only
     var dzXY = toXY(dzInfo.lat, dzInfo.lon);
-    ctx.strokeStyle = '#ef4444';
-    ctx.lineWidth = 2.5;
-    ctx.beginPath(); ctx.arc(dzXY[0], dzXY[1], 10, 0, Math.PI * 2); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(dzXY[0] - 15, dzXY[1]); ctx.lineTo(dzXY[0] + 15, dzXY[1]); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(dzXY[0], dzXY[1] - 15); ctx.lineTo(dzXY[0], dzXY[1] + 15); ctx.stroke();
-
-    // DZ label with background
-    ctx.font = '700 11px "Barlow Condensed", sans-serif';
-    ctx.textAlign = 'center';
-    var dzText = dzInfo.name.toUpperCase();
-    var tw = ctx.measureText(dzText).width;
-    ctx.fillStyle = 'rgba(255,255,255,0.85)';
-    ctx.fillRect(dzXY[0] - tw / 2 - 3, dzXY[1] + 14, tw + 6, 14);
-    ctx.fillStyle = '#ef4444';
-    ctx.fillText(dzText, dzXY[0], dzXY[1] + 25);
+    ctx.fillStyle = 'rgba(239,68,68,0.7)';
+    ctx.beginPath(); ctx.arc(dzXY[0], dzXY[1], 4, 0, Math.PI * 2); ctx.fill();
 
     // Aircraft
     var acCount = 0;
@@ -1907,7 +1894,7 @@ body {
     ctx.fillStyle = 'rgba(0,0,0,0.4)';
     ctx.font = '8px sans-serif';
     ctx.textAlign = 'right';
-    ctx.fillText('© OpenStreetMap', w - 4, h - 3);
+    ctx.fillText('© Esri', w - 4, h - 3);
   }
 
   function renderLastUpdated() {
