@@ -254,7 +254,7 @@ body {
 .load-card[data-status="airborne"] { border-top-color: var(--blue-500); }
 .load-card[data-status="trained"] { border-top-color: var(--amber-500); }
 .load-card[data-status="candidate"] { border-top-color: var(--green-500); }
-.load-card[data-status="landedComplete"] { border-top-color: var(--grey-400); opacity: 0.6; }
+.load-card[data-status="landedComplete"], .load-card[data-status="landedPartial"] { border-top-color: var(--grey-400); opacity: 0.6; }
 .load-card[data-status="draft"] { border-top-color: var(--grey-200); opacity: 0.35; }
 
 .card-header {
@@ -285,7 +285,7 @@ body {
 .status-badge.airborne { background: var(--blue-100); color: #1d4ed8; }
 .status-badge.trained { background: var(--amber-100); color: #92400e; }
 .status-badge.candidate { background: var(--green-100); color: #166534; }
-.status-badge.landedComplete { background: var(--grey-200); color: var(--slate-600); }
+.status-badge.landedComplete, .status-badge.landedPartial { background: var(--grey-200); color: var(--slate-600); }
 .status-badge.draft { background: var(--grey-100); color: var(--grey-400); }
 
 .card-meta {
@@ -828,7 +828,7 @@ body {
 
       const today = todayStr();
       manifests = (manifestData.manifestCollection || []).filter(function(m) {
-        return m.dropzoneId === config.dzId && m.manifestDate === today;
+        return m.manifestDate === today;
       });
 
       weatherHold = weatherData.isOnWeatherHold || false;
@@ -850,7 +850,7 @@ body {
   }
 
   // --- Sort order ---
-  var statusOrder = { airborne: 0, trained: 1, candidate: 2, landedComplete: 3, draft: 4 };
+  var statusOrder = { airborne: 0, trained: 1, candidate: 2, landedComplete: 3, landedPartial: 3, draft: 4 };
 
   function sortManifests(arr) {
     return arr.slice().sort(function(a, b) {
@@ -862,7 +862,7 @@ body {
   }
 
   // --- Helpers ---
-  var statusLabels = { airborne: 'In Air', trained: 'Kit On', candidate: 'Manifested', landedComplete: 'Landed', draft: 'Draft' };
+  var statusLabels = { airborne: 'In Air', trained: 'Kit On', candidate: 'Manifested', landedComplete: 'Landed', landedPartial: 'Landed (Partial)', draft: 'Draft' };
 
   function fmtTime(iso) {
     if (!iso) return null;
@@ -903,6 +903,7 @@ body {
         case 'trained': trained++; break;
         case 'candidate': candidate++; break;
         case 'landedComplete': landed++; break;
+        case 'landedPartial': landed++; break;
       }
       (m.customers || []).forEach(function(c) {
         if (c.customerRole === 'tandem') tandems++;
@@ -933,7 +934,7 @@ body {
     var sorted = sortManifests(manifests);
     if (viewFilter === 'active') {
       sorted = sorted.filter(function(m) {
-        return m.manifestStatus !== 'landedComplete' && m.manifestStatus !== 'draft';
+        return m.manifestStatus !== 'landedComplete' && m.manifestStatus !== 'landedPartial' && m.manifestStatus !== 'draft';
       });
     }
     if (sorted.length === 0) {
