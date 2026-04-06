@@ -1130,6 +1130,7 @@ body {
       }
       (m.customers || []).forEach(function(c) {
         if (c.customerRole === 'tandem') tandems++;
+        if (c.customerRole === 'sports') sports++;
       });
       (m.colleagues || []).forEach(function(c) {
         if (c.colleagueRole === 'sportsSolo') sports++;
@@ -1293,24 +1294,25 @@ body {
         });
       }
 
-      // Sports
+      // Sports — colleagues (sportsSolo) and customers (sports role)
       var sportsColleagues = colleagues.filter(function(c) { return c.colleagueRole === 'sportsSolo'; });
+      var sportsCustomers = customers.filter(function(c) { return c.customerRole === 'sports'; });
       var sportsHtml = '';
-      if (sportsColleagues.length > 0) {
+      if (sportsColleagues.length > 0 || sportsCustomers.length > 0) {
         sportsHtml = '<div class="section-label">Sports</div>';
+
+        // Sports colleagues (staff jumpers)
         sportsColleagues.forEach(function(col) {
           var colSet = sets.find(function(s) { return s.eid === col.setEid; });
           var colAlt = colSet ? fmtAlt(colSet.jumpAltitudeInFt) : '';
           var bpa = col.bpaLicenseType;
           var bpaBadge = bpa ? '<span class="tag tag-bpa tag-bpa-' + bpa + '">' + bpa.toUpperCase() + '</span>' : '';
 
-          // Detail line
           var details = [];
           var totalWeight = (col.weightInLbs || 0) + (col.equipmentWeightInLbs || 0);
           if (totalWeight) details.push('<span>' + totalWeight + ' lbs</span>');
           if (col.jumpMasterSeniority > 0) details.push('<span>JM ' + col.jumpMasterSeniority + '</span>');
 
-          // Tags
           var tags = '';
           if (colAlt) tags += '<span class="tag tag-alt">' + colAlt + '</span>';
           if (col.cameraName) tags += '<span class="tag tag-cam">' + esc(col.cameraName) + '</span>';
@@ -1320,6 +1322,30 @@ body {
           sportsHtml += '<div class="sport-row">' +
             '<div class="sport-info">' +
               '<div class="sport-name">' + esc(col.fullName) + '</div>' +
+              (details.length ? '<div class="sport-detail">' + details.join('') + '</div>' : '') +
+            '</div>' +
+            '<div class="sport-tags">' + bpaBadge + tags + '</div>' +
+          '</div>';
+        });
+
+        // Sports customers (club jumpers)
+        sportsCustomers.forEach(function(cust) {
+          var custSet = sets.find(function(s) { return s.eid === cust.setEid; });
+          var custAlt = custSet ? fmtAlt(custSet.jumpAltitudeInFt) : '';
+          var bpa = cust.bpaLicenseType;
+          var bpaBadge = bpa ? '<span class="tag tag-bpa tag-bpa-' + bpa + '">' + bpa.toUpperCase() + '</span>' : '';
+
+          var details = [];
+          if (cust.weightInLbs) details.push('<span>' + cust.weightInLbs + ' lbs</span>');
+
+          var tags = '';
+          if (custAlt) tags += '<span class="tag tag-alt">' + custAlt + '</span>';
+          if (cust.prominantNote) tags += '<span class="tag tag-note" title="' + esc(cust.prominantNote) + '">' + esc(cust.prominantNote) + '</span>';
+          if (!cust.fitSignatureFileLocation) tags += '<span class="tag tag-nosig">No sig</span>';
+
+          sportsHtml += '<div class="sport-row">' +
+            '<div class="sport-info">' +
+              '<div class="sport-name">' + esc(cust.fullName) + '</div>' +
               (details.length ? '<div class="sport-detail">' + details.join('') + '</div>' : '') +
             '</div>' +
             '<div class="sport-tags">' + bpaBadge + tags + '</div>' +
