@@ -983,6 +983,33 @@ body {
         <label>Refresh Interval (seconds)</label>
         <input type="number" id="settingInterval" min="5" max="300">
       </div>
+      <div style="border-top:1px solid var(--slate-200);margin-top:8px;padding-top:16px;">
+        <div class="field">
+          <label>Notifications</label>
+          <div style="display:flex;align-items:center;gap:10px;">
+            <input type="checkbox" id="settingNotify" style="width:auto;">
+            <span style="font-size:13px;color:var(--slate-600);">Alert me on Kit On / Airborne</span>
+          </div>
+        </div>
+        <div class="field">
+          <label>Your Name (to match on manifest)</label>
+          <input type="text" id="settingMyName" placeholder="e.g. Nick Woods">
+        </div>
+        <div class="field">
+          <label>Notify on status changes</label>
+          <div style="display:flex;flex-direction:column;gap:6px;">
+            <label style="font-size:13px;color:var(--slate-600);display:flex;align-items:center;gap:6px;text-transform:none;letter-spacing:0;">
+              <input type="checkbox" id="notifyKitOn" checked style="width:auto;"> Kit On (trained)
+            </label>
+            <label style="font-size:13px;color:var(--slate-600);display:flex;align-items:center;gap:6px;text-transform:none;letter-spacing:0;">
+              <input type="checkbox" id="notifyAirborne" style="width:auto;"> In Air (airborne)
+            </label>
+            <label style="font-size:13px;color:var(--slate-600);display:flex;align-items:center;gap:6px;text-transform:none;letter-spacing:0;">
+              <input type="checkbox" id="notifyAll" style="width:auto;"> All loads (not just mine)
+            </label>
+          </div>
+        </div>
+      </div>
     </div>
     <div class="modal-footer">
       <button class="btn btn-secondary" id="settingsCancel">Cancel</button>
@@ -1007,7 +1034,12 @@ body {
       dzId: localStorage.getItem('hm_dz') || DEFAULT_DZ,
       apiKey: localStorage.getItem('hm_apiKey') || DEFAULT_KEY,
       interval: parseInt(localStorage.getItem('hm_interval'), 10) || DEFAULT_INTERVAL,
-      proxy: localStorage.getItem('hm_proxy') !== null ? localStorage.getItem('hm_proxy') : DEFAULT_PROXY
+      proxy: localStorage.getItem('hm_proxy') !== null ? localStorage.getItem('hm_proxy') : DEFAULT_PROXY,
+      notifyEnabled: localStorage.getItem('hm_notify') === 'true',
+      myName: localStorage.getItem('hm_myName') || '',
+      notifyKitOn: localStorage.getItem('hm_notifyKitOn') !== 'false',
+      notifyAirborne: localStorage.getItem('hm_notifyAirborne') === 'true',
+      notifyAll: localStorage.getItem('hm_notifyAll') === 'true'
     };
   }
 
@@ -1016,6 +1048,11 @@ body {
     localStorage.setItem('hm_apiKey', cfg.apiKey);
     localStorage.setItem('hm_interval', cfg.interval);
     localStorage.setItem('hm_proxy', cfg.proxy);
+    localStorage.setItem('hm_notify', cfg.notifyEnabled);
+    localStorage.setItem('hm_myName', cfg.myName);
+    localStorage.setItem('hm_notifyKitOn', cfg.notifyKitOn);
+    localStorage.setItem('hm_notifyAirborne', cfg.notifyAirborne);
+    localStorage.setItem('hm_notifyAll', cfg.notifyAll);
   }
 
   let config = loadConfig();
@@ -1028,6 +1065,7 @@ body {
   let planesMap = {};       // planeId → { registration, planeName, maxWeightInLbs, capacity }
   let aircraftLive = {};    // registration → { alt_baro, gs, baro_rate, lat, lon, on_ground, seen }
   let dzInfo = null;        // { lat, lon, name } from /dropzones
+  let prevManifestStatuses = {};  // manifestId → previous status
 
   // --- DOM refs ---
   const $clock = document.getElementById('clock');
@@ -1138,6 +1176,10 @@ body {
 
       lastUpdateTime = new Date();
       setStatus('ok', 'Live');
+
+      // Check for status changes and notify
+      checkNotifications(manifests);
+
       render();
 
       // Fire aircraft tracking (non-blocking)
@@ -1253,6 +1295,57 @@ body {
 
   function findBySetEid(arr, setEid) {
     return arr.filter(function(x) { return x.setEid === setEid; });
+  }
+
+  // --- Notifications ---
+  function isOnManifest(m) {
+    if (!config.myName) return false;
+    var name = config.myName.trim().toLowerCase();
+    var found = (m.customers || []).some(function(c) { return c.fullName.toLowerCase() === name; });
+    if (!found) found = (m.colleagues || []).some(function(c) { return c.fullName.toLowerCase() === name; });
+    return found;
+  }
+
+  function fireNotification(title, body) {
+    if (!('Notification' in window) || Notification.permission !== 'granted') return;
+    try {
+      var n = new Notification(title, { body: body, icon: 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y=".9em" font-size="90">🪂</text></svg>', tag: title, requireInteraction: true });
+      // Auto close after 30s
+      setTimeout(function() { n.close(); }, 30000);
+    } catch(e) {}
+  }
+
+  function checkNotifications(newManifests) {
+    if (!config.notifyEnabled) return;
+
+    newManifests.forEach(function(m) {
+      var id = m.id;
+      var prevStatus = prevManifestStatuses[id];
+      var newStatus = m.manifestStatus;
+
+      // Skip if no change or first load
+      if (!prevStatus || prevStatus === newStatus) return;
+
+      var liftLabel = m.liftNumber != null ? 'Lift #' + m.liftNumber : 'Unscheduled';
+      var onMyLoad = config.notifyAll || isOnManifest(m);
+
+      if (!onMyLoad) return;
+
+      // Kit On notification
+      if (config.notifyKitOn && newStatus === 'trained' && prevStatus !== 'trained') {
+        fireNotification('🟡 KIT ON — ' + liftLabel, 'Your load is kitting up! Get to the manifest area.');
+      }
+
+      // Airborne notification
+      if (config.notifyAirborne && newStatus === 'airborne' && prevStatus !== 'airborne') {
+        fireNotification('🔵 IN AIR — ' + liftLabel, 'Your load has taken off!');
+      }
+    });
+
+    // Update previous statuses
+    var newMap = {};
+    newManifests.forEach(function(m) { newMap[m.id] = m.manifestStatus; });
+    prevManifestStatuses = newMap;
   }
 
   // --- Render ---
@@ -1751,6 +1844,11 @@ body {
     $settingApiKey.value = config.apiKey;
     $settingProxy.value = config.proxy;
     $settingInterval.value = config.interval;
+    document.getElementById('settingNotify').checked = config.notifyEnabled;
+    document.getElementById('settingMyName').value = config.myName;
+    document.getElementById('notifyKitOn').checked = config.notifyKitOn;
+    document.getElementById('notifyAirborne').checked = config.notifyAirborne;
+    document.getElementById('notifyAll').checked = config.notifyAll;
     $modal.classList.add('open');
   });
 
@@ -1767,6 +1865,17 @@ body {
     config.apiKey = $settingApiKey.value;
     config.proxy = $settingProxy.value;
     config.interval = Math.max(5, parseInt($settingInterval.value, 10) || DEFAULT_INTERVAL);
+    config.notifyEnabled = document.getElementById('settingNotify').checked;
+    config.myName = document.getElementById('settingMyName').value;
+    config.notifyKitOn = document.getElementById('notifyKitOn').checked;
+    config.notifyAirborne = document.getElementById('notifyAirborne').checked;
+    config.notifyAll = document.getElementById('notifyAll').checked;
+
+    // Request notification permission if enabling
+    if (config.notifyEnabled && 'Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission();
+    }
+
     saveConfig(config);
     $modal.classList.remove('open');
     startPolling();
