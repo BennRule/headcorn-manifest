@@ -223,6 +223,109 @@ body {
   border-color: var(--slate-900);
 }
 
+/* Aircraft bar */
+.aircraft-bar {
+  background: var(--slate-800);
+  padding: 8px 24px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  border-bottom: 1px solid var(--slate-700);
+}
+
+.aircraft-bar-label {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 600;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--slate-400);
+  margin-right: 4px;
+}
+
+.aircraft-chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--slate-700);
+  border-radius: 6px;
+  padding: 5px 10px;
+  font-family: 'DM Mono', monospace;
+  font-size: 13px;
+  color: var(--slate-300);
+  border: 1px solid var(--slate-600);
+  transition: all 0.3s;
+}
+
+.aircraft-chip.airborne {
+  background: rgba(59,130,246,0.15);
+  border-color: var(--blue-500);
+  color: white;
+}
+
+.aircraft-chip.climbing {
+  background: rgba(34,197,94,0.15);
+  border-color: var(--green-500);
+  color: white;
+}
+
+.aircraft-chip.descending {
+  background: rgba(245,158,11,0.15);
+  border-color: var(--amber-500);
+  color: white;
+}
+
+.aircraft-chip.ground {
+  opacity: 0.5;
+}
+
+.aircraft-chip.no-data {
+  opacity: 0.3;
+  border-style: dashed;
+}
+
+.ac-reg {
+  font-weight: 700;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 14px;
+  letter-spacing: 0.5px;
+}
+
+.ac-status-icon {
+  font-size: 14px;
+  line-height: 1;
+}
+
+.ac-alt {
+  font-size: 12px;
+  color: var(--slate-300);
+}
+
+.ac-vrate {
+  font-size: 11px;
+  opacity: 0.7;
+}
+
+.ac-speed {
+  font-size: 11px;
+  opacity: 0.6;
+}
+
+.card-plane-reg {
+  font-family: 'DM Mono', monospace;
+  font-size: 12px;
+  color: var(--slate-500);
+  font-weight: 500;
+}
+
+.card-live-alt {
+  font-family: 'DM Mono', monospace;
+  font-size: 11px;
+  color: var(--blue-500);
+  font-weight: 500;
+}
+
 /* Main layout */
 .main {
   display: flex;
@@ -701,6 +804,11 @@ body {
   <button class="filter-btn" data-filter="all">All Loads</button>
 </div>
 
+<!-- Aircraft bar -->
+<div class="aircraft-bar" id="aircraftBar">
+  <span class="aircraft-bar-label">Fleet</span>
+</div>
+
 <!-- Main content -->
 <div class="main">
   <div class="loads-area">
@@ -790,6 +898,8 @@ body {
   let wallboardMsg = null;
   let lastUpdateTime = null;
   let viewFilter = 'active'; // 'active' or 'all'
+  let planesMap = {};       // planeId → { registration, planeName, maxWeightInLbs, capacity }
+  let aircraftLive = {};    // registration → { alt_baro, gs, baro_rate, lat, lon, on_ground, seen }
 
   // --- DOM refs ---
   const $clock = document.getElementById('clock');
@@ -809,6 +919,7 @@ body {
   const $loadsGrid = document.getElementById('loadsGrid');
   const $sidebarList = document.getElementById('sidebarList');
   const $lastUpdated = document.getElementById('lastUpdated');
+  const $aircraftBar = document.getElementById('aircraftBar');
   const $modal = document.getElementById('settingsModal');
   const $settingDz = document.getElementById('settingDz');
   const $settingApiKey = document.getElementById('settingApiKey');
@@ -847,9 +958,11 @@ body {
       var proxy = config.proxy || '';
       var manifestUrl = BASE_URL + '/manifests?dropzone_id=' + config.dzId;
       var weatherUrl = BASE_URL + '/calendar/weather-holds?dropzone_id=' + config.dzId + '&date=' + todayStr();
-      const [manifestRes, weatherRes] = await Promise.all([
+      var planesUrl = BASE_URL + '/planes?dropzone_id=' + config.dzId;
+      const [manifestRes, weatherRes, planesRes] = await Promise.all([
         fetch(proxy + encodeURIComponent(manifestUrl), { headers: headers() }),
-        fetch(proxy + encodeURIComponent(weatherUrl), { headers: headers() })
+        fetch(proxy + encodeURIComponent(weatherUrl), { headers: headers() }),
+        fetch(proxy + encodeURIComponent(planesUrl), { headers: headers() })
       ]);
 
       if (!manifestRes.ok) throw new Error('Manifest API returned ' + manifestRes.status);
@@ -857,6 +970,22 @@ body {
 
       const manifestData = await manifestRes.json();
       const weatherData = await weatherRes.json();
+
+      // Build planes lookup
+      if (planesRes.ok) {
+        var planesData = await planesRes.json();
+        planesMap = {};
+        (planesData.planeCollection || []).forEach(function(p) {
+          if (!p.isArchived) {
+            planesMap[p.id] = {
+              registration: p.registration,
+              planeName: p.planeName,
+              maxWeightInLbs: p.maxLoadWeightInLbs,
+              capacity: p.capacityPassengers
+            };
+          }
+        });
+      }
 
       const today = todayStr();
       manifests = (manifestData.manifestCollection || []).filter(function(m) {
@@ -869,6 +998,9 @@ body {
       lastUpdateTime = new Date();
       setStatus('ok', 'Live');
       render();
+
+      // Fire aircraft tracking (non-blocking)
+      fetchAircraftTracking();
     } catch (err) {
       setStatus('error', 'Error');
       var msg = err.message || 'Unknown error';
@@ -879,6 +1011,64 @@ body {
       $errorBanner.classList.add('visible');
       if (lastUpdateTime) render();
     }
+  }
+
+  // --- Aircraft tracking via adsb.lol ---
+  var ADSB_BASE = 'https://api.adsb.lol/v2/reg/';
+
+  async function fetchAircraftTracking() {
+    // Get unique registrations from planes map
+    var regs = [];
+    var seen = {};
+    Object.values(planesMap).forEach(function(p) {
+      var reg = p.registration;
+      if (reg && !seen[reg]) {
+        seen[reg] = true;
+        regs.push(reg);
+      }
+    });
+
+    if (regs.length === 0) {
+      renderAircraft();
+      return;
+    }
+
+    var proxy = config.proxy || '';
+    var newLive = {};
+
+    // Fetch all in parallel
+    var fetches = regs.map(function(reg) {
+      var url = ADSB_BASE + encodeURIComponent(reg);
+      // Try direct first (adsb.lol supports CORS), fall back to proxy
+      return fetch(url).catch(function() {
+        return fetch(proxy + encodeURIComponent(url));
+      }).then(function(res) {
+        if (!res.ok) return null;
+        return res.json();
+      }).then(function(data) {
+        if (data && data.ac && data.ac.length > 0) {
+          var ac = data.ac[0];
+          newLive[reg] = {
+            alt_baro: ac.alt_baro,
+            gs: ac.gs,
+            baro_rate: ac.baro_rate,
+            lat: ac.lat,
+            lon: ac.lon,
+            on_ground: ac.alt_baro === 'ground',
+            seen: ac.seen,
+            flight: (ac.flight || '').trim(),
+            track: ac.track
+          };
+        }
+      }).catch(function() {
+        // Non-fatal — skip this registration
+      });
+    });
+
+    await Promise.all(fetches);
+    aircraftLive = newLive;
+    renderAircraft();
+    renderLoads(); // Re-render cards with live alt
   }
 
   // --- Sort order ---
@@ -922,6 +1112,7 @@ body {
   function render() {
     renderMetrics();
     renderBanners();
+    renderAircraft();
     renderLoads();
     renderSidebar();
     renderLastUpdated();
@@ -960,6 +1151,82 @@ body {
     } else {
       $messageBanner.classList.remove('visible');
     }
+  }
+
+  function getAircraftStatus(reg) {
+    var ac = aircraftLive[reg];
+    if (!ac || ac.seen > 120) return { state: 'no-data', label: 'No tracking', icon: '—', alt: null, rate: null, speed: null };
+    if (ac.on_ground) return { state: 'ground', label: 'On ground', icon: '⬇', alt: null, rate: null, speed: null };
+    var alt = typeof ac.alt_baro === 'number' ? ac.alt_baro : null;
+    var rate = ac.baro_rate || 0;
+    var speed = ac.gs ? Math.round(ac.gs) : null;
+    if (rate > 300) return { state: 'climbing', label: 'Climbing', icon: '↑', alt: alt, rate: rate, speed: speed };
+    if (rate < -300) return { state: 'descending', label: 'Descending', icon: '↓', alt: alt, rate: rate, speed: speed };
+    return { state: 'airborne', label: 'Airborne', icon: '✈', alt: alt, rate: rate, speed: speed };
+  }
+
+  function renderAircraft() {
+    // Get registrations assigned to today's manifests + any with live data
+    var todayRegs = {};
+    manifests.forEach(function(m) {
+      if (m.planeId && planesMap[m.planeId]) {
+        todayRegs[planesMap[m.planeId].registration] = planesMap[m.planeId];
+      }
+    });
+    // Also include any with live data
+    Object.keys(aircraftLive).forEach(function(reg) {
+      if (!todayRegs[reg]) {
+        // Find in planesMap
+        Object.values(planesMap).forEach(function(p) {
+          if (p.registration === reg) todayRegs[reg] = p;
+        });
+      }
+    });
+
+    var regs = Object.keys(todayRegs);
+    if (regs.length === 0 && Object.keys(planesMap).length === 0) {
+      $aircraftBar.innerHTML = '<span class="aircraft-bar-label">Fleet</span><span style="color:var(--slate-500);font-size:12px;">No aircraft data</span>';
+      return;
+    }
+
+    // If no specific today regs, show all fleet
+    if (regs.length === 0) {
+      var seen = {};
+      Object.values(planesMap).forEach(function(p) {
+        if (!seen[p.registration]) {
+          seen[p.registration] = true;
+          todayRegs[p.registration] = p;
+        }
+      });
+      regs = Object.keys(todayRegs);
+    }
+
+    var html = '<span class="aircraft-bar-label">Fleet</span>';
+    regs.forEach(function(reg) {
+      var status = getAircraftStatus(reg);
+      var chipClass = 'aircraft-chip ' + status.state;
+
+      html += '<div class="' + chipClass + '">';
+      html += '<span class="ac-reg">' + esc(reg) + '</span>';
+      html += '<span class="ac-status-icon">' + status.icon + '</span>';
+
+      if (status.alt !== null) {
+        html += '<span class="ac-alt">' + Math.round(status.alt).toLocaleString() + ' ft</span>';
+      }
+
+      if (status.rate && Math.abs(status.rate) > 100) {
+        var rateStr = (status.rate > 0 ? '+' : '') + Math.round(status.rate) + ' fpm';
+        html += '<span class="ac-vrate">' + rateStr + '</span>';
+      }
+
+      if (status.speed !== null && status.state !== 'ground' && status.state !== 'no-data') {
+        html += '<span class="ac-speed">' + status.speed + ' kts</span>';
+      }
+
+      html += '</div>';
+    });
+
+    $aircraftBar.innerHTML = html;
   }
 
   function renderLoads() {
@@ -1062,10 +1329,26 @@ body {
 
       var hasBody = tandemHtml || sportsHtml;
 
+      // Plane info for this load
+      var planeInfo = m.planeId && planesMap[m.planeId] ? planesMap[m.planeId] : null;
+      var planeReg = planeInfo ? planeInfo.registration : null;
+      var planeRegHtml = planeReg ? '<span class="card-plane-reg">' + esc(planeReg) + '</span>' : '';
+
+      // Live altitude if plane is airborne
+      var liveAltHtml = '';
+      if (planeReg && aircraftLive[planeReg]) {
+        var acStatus = getAircraftStatus(planeReg);
+        if (acStatus.alt !== null) {
+          liveAltHtml = '<span class="card-live-alt">' + acStatus.icon + ' ' + Math.round(acStatus.alt).toLocaleString() + ' ft</span>';
+        }
+      }
+
       return '<div class="load-card" data-status="' + statusClass + '">' +
         '<div class="card-header">' +
           '<span class="lift-number">' + (m.liftNumber != null ? 'Lift #' + m.liftNumber : 'Unscheduled') + '</span>' +
+          planeRegHtml +
           '<span class="status-badge ' + statusClass + '">' + statusLabel + '</span>' +
+          liveAltHtml +
           '<div class="card-meta">' +
             (timeStr ? '<span>' + timeStr + '</span>' : '') +
             (alt ? '<span class="alt-tag">' + alt + '</span>' : '') +
