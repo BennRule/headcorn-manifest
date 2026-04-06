@@ -617,12 +617,24 @@ body {
 .tag-bpa-c { background: #fef3c7; color: #92400e; }
 .tag-bpa-d { background: #ede9fe; color: #6d28d9; }
 
+/* Sports section styling */
+.sports-section {
+  background: #f0fdf4;
+  border-left: 3px solid var(--green-500);
+  margin: 0 -16px;
+  padding: 8px 16px;
+}
+
+.sports-section .section-label {
+  color: #166534;
+}
+
 .sport-row {
   display: flex;
   align-items: flex-start;
   gap: 8px;
   padding: 5px 0;
-  border-bottom: 1px solid var(--slate-50);
+  border-bottom: 1px solid rgba(22,101,52,0.08);
   font-size: 14px;
 }
 
@@ -630,7 +642,7 @@ body {
 
 .sport-info { flex: 1; min-width: 0; }
 
-.sport-name { font-weight: 600; color: var(--slate-800); }
+.sport-name { font-weight: 700; font-size: 15px; color: var(--slate-800); }
 
 .sport-detail {
   font-size: 12px;
@@ -925,6 +937,8 @@ body {
 <div class="filter-bar">
   <button class="filter-btn active" data-filter="active">Active</button>
   <button class="filter-btn" data-filter="all">All Loads</button>
+  <span style="width:1px;height:20px;background:var(--slate-200);margin:0 4px;"></span>
+  <button class="filter-btn" data-filter="sports">Sports Only</button>
 </div>
 
 <!-- Aircraft bar -->
@@ -1483,15 +1497,26 @@ body {
     $aircraftBar.innerHTML = html;
   }
 
+  function hasSportsJumpers(m) {
+    var hasSportCol = (m.colleagues || []).some(function(c) { return c.colleagueRole === 'sportsSolo'; });
+    var hasSportCust = (m.customers || []).some(function(c) { return c.customerRole === 'sports'; });
+    return hasSportCol || hasSportCust;
+  }
+
   function renderLoads() {
     var sorted = sortManifests(manifests);
     if (viewFilter === 'active') {
       sorted = sorted.filter(function(m) {
         return m.manifestStatus !== 'landedComplete' && m.manifestStatus !== 'landedPartial' && m.manifestStatus !== 'draft';
       });
+    } else if (viewFilter === 'sports') {
+      sorted = sorted.filter(function(m) {
+        return hasSportsJumpers(m);
+      });
     }
     if (sorted.length === 0) {
-      var msg = viewFilter === 'active' ? 'No active loads — switch to "All Loads" to see landed lifts' : 'No loads for today';
+      var msg = viewFilter === 'active' ? 'No active loads — switch to "All Loads" to see landed lifts' :
+                viewFilter === 'sports' ? 'No loads with sport jumpers today' : 'No loads for today';
       $loadsGrid.innerHTML = '<div class="empty-state">' + msg + '</div>';
       return;
     }
@@ -1580,7 +1605,7 @@ body {
       var sportsCustomers = customers.filter(function(c) { return c.customerRole === 'sports'; });
       var sportsHtml = '';
       if (sportsColleagues.length > 0 || sportsCustomers.length > 0) {
-        sportsHtml = '<div class="section-label">Sports</div>';
+        sportsHtml = '<div class="sports-section"><div class="section-label">Sports (' + (sportsColleagues.length + sportsCustomers.length) + ')</div>';
 
         // Sports colleagues (staff jumpers)
         sportsColleagues.forEach(function(col) {
@@ -1659,7 +1684,11 @@ body {
         });
         // Then ungrouped
         sportNoTeam.forEach(function(cust) { sportsHtml += renderSportCustomerRow(cust); });
+        sportsHtml += '</div>'; // close sports-section
       }
+
+      // In sports-only mode, hide tandems
+      if (viewFilter === 'sports') tandemHtml = '';
 
       var hasBody = tandemHtml || sportsHtml;
 
