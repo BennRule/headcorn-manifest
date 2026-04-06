@@ -828,7 +828,7 @@ body {
 
       const today = todayStr();
       manifests = (manifestData.manifestCollection || []).filter(function(m) {
-        return m.manifestDate === today;
+        return m.dropzoneId === config.dzId && m.manifestDate === today;
       });
 
       weatherHold = weatherData.isOnWeatherHold || false;
