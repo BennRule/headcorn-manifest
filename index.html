@@ -449,6 +449,59 @@ body {
   border-radius: 3px;
 }
 
+/* Fullscreen map */
+.fullscreen-map-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 150;
+  background: var(--slate-900);
+  flex-direction: column;
+}
+
+.fullscreen-map-overlay.open {
+  display: flex;
+}
+
+.fullscreen-map-header {
+  height: 50px;
+  background: var(--slate-900);
+  display: flex;
+  align-items: center;
+  padding: 0 16px;
+  gap: 16px;
+  border-bottom: 1px solid var(--slate-700);
+  flex-shrink: 0;
+}
+
+.fullscreen-map-back {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: none;
+  border: 1px solid var(--slate-600);
+  color: var(--slate-300);
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 600;
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 6px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.fullscreen-map-back:hover { background: var(--slate-700); }
+
+.fullscreen-map-title {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 700;
+  font-size: 16px;
+  letter-spacing: 1.5px;
+  color: white;
+}
+
 /* Main layout */
 .main {
   display: flex;
@@ -963,10 +1016,23 @@ body {
       <div class="empty-state">No active tandems</div>
     </div>
     <div style="padding:12px 16px;">
-      <canvas id="dzMap" class="map-canvas" width="268" height="200" style="border-radius:6px;background:var(--slate-100);width:100%;"></canvas>
+      <canvas id="dzMap" class="map-canvas" width="268" height="200" style="border-radius:6px;background:var(--slate-100);width:100%;cursor:pointer;" title="Click for fullscreen map"></canvas>
       <div id="mapLabel" style="font-family:'DM Mono',monospace;font-size:10px;color:var(--slate-400);margin-top:4px;text-align:center;"></div>
     </div>
   </aside>
+</div>
+
+<!-- Fullscreen map overlay -->
+<div class="fullscreen-map-overlay" id="fullscreenMap">
+  <div class="fullscreen-map-header">
+    <button class="fullscreen-map-back" id="mapBack">
+      <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg>
+      Back to Manifest
+    </button>
+    <span class="fullscreen-map-title">AIRFIELD MAP</span>
+    <span id="fullMapLabel" style="font-family:'DM Mono',monospace;font-size:12px;color:var(--slate-400);"></span>
+  </div>
+  <canvas id="dzMapFull" style="display:block;width:100%;height:calc(100vh - 50px);background:#1a2e1a;"></canvas>
 </div>
 
 <!-- Settings modal -->
@@ -1966,6 +2032,158 @@ body {
       renderLoads();
     });
   });
+
+  // --- Fullscreen map ---
+  var fullMapOpen = false;
+  var fullMapTimer = null;
+
+  document.getElementById('dzMap').addEventListener('click', function() {
+    openFullMap();
+  });
+
+  document.getElementById('mapBack').addEventListener('click', function() {
+    closeFullMap();
+  });
+
+  function openFullMap() {
+    fullMapOpen = true;
+    document.getElementById('fullscreenMap').classList.add('open');
+    resizeFullMap();
+    renderFullMap();
+    // Keep updating while open
+    fullMapTimer = setInterval(renderFullMap, 2000);
+  }
+
+  function closeFullMap() {
+    fullMapOpen = false;
+    document.getElementById('fullscreenMap').classList.remove('open');
+    if (fullMapTimer) { clearInterval(fullMapTimer); fullMapTimer = null; }
+  }
+
+  // Close on Escape
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape' && fullMapOpen) closeFullMap();
+  });
+
+  function resizeFullMap() {
+    var canvas = document.getElementById('dzMapFull');
+    var rect = canvas.getBoundingClientRect();
+    canvas.width = rect.width * (window.devicePixelRatio || 1);
+    canvas.height = rect.height * (window.devicePixelRatio || 1);
+  }
+
+  var fullMapTilesLoaded = {};
+  var FULL_MAP_ZOOM = 14; // Higher zoom for fullscreen
+
+  function renderFullMap() {
+    var canvas = document.getElementById('dzMapFull');
+    var label = document.getElementById('fullMapLabel');
+    if (!canvas || !dzInfo) return;
+    var ctx = canvas.getContext('2d');
+    var dpr = window.devicePixelRatio || 1;
+    var w = canvas.width;
+    var h = canvas.height;
+    var zoom = FULL_MAP_ZOOM;
+
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+
+    var cp = latLonToPixel(dzInfo.lat, dzInfo.lon, zoom);
+    var ox = cp[0] * dpr - w / 2;
+    var oy = cp[1] * dpr - h / 2;
+
+    function toXY(lat, lon) {
+      var p = latLonToPixel(lat, lon, zoom);
+      return [p[0] * dpr - ox, p[1] * dpr - oy];
+    }
+
+    var tileSize = 256 * dpr;
+    var startTileX = Math.floor(ox / tileSize);
+    var startTileY = Math.floor(oy / tileSize);
+    var endTileX = Math.floor((ox + w) / tileSize);
+    var endTileY = Math.floor((oy + h) / tileSize);
+
+    ctx.fillStyle = '#1a2e1a';
+    ctx.fillRect(0, 0, w, h);
+
+    for (var tx = startTileX; tx <= endTileX; tx++) {
+      for (var ty = startTileY; ty <= endTileY; ty++) {
+        var key = zoom + '/' + tx + '/' + ty;
+        var drawX = tx * tileSize - ox;
+        var drawY = ty * tileSize - oy;
+        if (fullMapTilesLoaded[key] && fullMapTilesLoaded[key].complete) {
+          ctx.drawImage(fullMapTilesLoaded[key], drawX, drawY, tileSize, tileSize);
+        } else if (!fullMapTilesLoaded[key]) {
+          var img = new Image();
+          img.crossOrigin = 'anonymous';
+          img.src = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/' + zoom + '/' + ty + '/' + tx;
+          fullMapTilesLoaded[key] = img;
+          img.onload = function() { renderFullMap(); };
+        }
+      }
+    }
+
+    // DZ dot
+    var dzXY = toXY(dzInfo.lat, dzInfo.lon);
+    ctx.fillStyle = 'rgba(239,68,68,0.8)';
+    ctx.beginPath(); ctx.arc(dzXY[0], dzXY[1], 6 * dpr, 0, Math.PI * 2); ctx.fill();
+
+    // Aircraft
+    var acCount = 0;
+    var scale = dpr;
+    Object.keys(aircraftLive).forEach(function(reg) {
+      var ac = aircraftLive[reg];
+      if (!ac || !ac.lat || !ac.lon || ac.on_ground) return;
+      var xy = toXY(ac.lat, ac.lon);
+      if (xy[0] < -50 || xy[0] > w + 50 || xy[1] < -50 || xy[1] > h + 50) return;
+      acCount++;
+
+      var status = getAircraftStatus(reg);
+      var color = status.state === 'climbing' ? '#22c55e' : status.state === 'run-in' ? '#ef4444' : status.state === 'descending' ? '#f59e0b' : '#3b82f6';
+
+      ctx.save();
+      ctx.shadowColor = 'rgba(0,0,0,0.5)';
+      ctx.shadowBlur = 6 * scale;
+
+      var track = (ac.track || 0) * Math.PI / 180;
+      ctx.translate(xy[0], xy[1]);
+      ctx.rotate(track);
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      ctx.moveTo(0, -14 * scale);
+      ctx.lineTo(-8 * scale, 10 * scale);
+      ctx.lineTo(8 * scale, 10 * scale);
+      ctx.closePath();
+      ctx.fill();
+      ctx.restore();
+
+      // Label
+      ctx.font = '700 ' + (13 * scale) + 'px "Barlow Condensed", sans-serif';
+      ctx.textAlign = 'left';
+      var altText = status.alt ? ' ' + Math.round(status.alt).toLocaleString() + ' ft' : '';
+      var labelText = reg + altText;
+      var lw = ctx.measureText(labelText).width;
+      ctx.fillStyle = 'rgba(0,0,0,0.7)';
+      ctx.fillRect(xy[0] + 14 * scale, xy[1] - 8 * scale, lw + 8 * scale, 18 * scale);
+      ctx.fillStyle = color;
+      ctx.fillText(labelText, xy[0] + 18 * scale, xy[1] + 6 * scale);
+
+      // Speed + status label
+      var infoText = status.label + (status.speed ? ' · ' + status.speed + ' kts' : '');
+      ctx.font = '500 ' + (10 * scale) + 'px "Barlow", sans-serif';
+      ctx.fillStyle = 'rgba(255,255,255,0.7)';
+      ctx.fillText(infoText, xy[0] + 18 * scale, xy[1] + 20 * scale);
+    });
+
+    if (label) {
+      label.textContent = acCount > 0 ? acCount + ' aircraft tracked' : 'No aircraft in range';
+    }
+
+    // Attribution
+    ctx.fillStyle = 'rgba(255,255,255,0.4)';
+    ctx.font = (10 * scale) + 'px sans-serif';
+    ctx.textAlign = 'right';
+    ctx.fillText('© Esri', w - 6 * scale, h - 4 * scale);
+  }
 
   // --- Refresh ---
   $refreshBtn.addEventListener('click', function() {
