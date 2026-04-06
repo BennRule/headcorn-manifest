@@ -276,6 +276,19 @@ body {
   color: white;
 }
 
+.aircraft-chip.run-in {
+  background: rgba(239,68,68,0.15);
+  border-color: var(--red-500);
+  color: white;
+  animation: pulse 1.5s infinite;
+}
+
+.aircraft-chip.canopy {
+  background: rgba(168,85,247,0.15);
+  border-color: #a855f7;
+  color: white;
+}
+
 .aircraft-chip.ground {
   opacity: 0.5;
 }
@@ -295,6 +308,15 @@ body {
 .ac-status-icon {
   font-size: 14px;
   line-height: 1;
+}
+
+.ac-label {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 600;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  opacity: 0.8;
 }
 
 .ac-alt {
@@ -1161,9 +1183,20 @@ body {
     var alt = typeof ac.alt_baro === 'number' ? ac.alt_baro : null;
     var rate = ac.baro_rate || 0;
     var speed = ac.gs ? Math.round(ac.gs) : null;
+    // Climbing: positive rate > 300 fpm
     if (rate > 300) return { state: 'climbing', label: 'Climbing', icon: '↑', alt: alt, rate: rate, speed: speed };
+    // Descending: negative rate beyond -300 fpm (after jumpers exit, or returning)
     if (rate < -300) return { state: 'descending', label: 'Descending', icon: '↓', alt: alt, rate: rate, speed: speed };
-    return { state: 'airborne', label: 'Airborne', icon: '✈', alt: alt, rate: rate, speed: speed };
+    // Running in: level flight at or above 10,000 ft, slow speed (< 110 kts)
+    if (alt !== null && alt >= 10000 && speed !== null && speed < 110) {
+      return { state: 'run-in', label: 'Run In', icon: '🎯', alt: alt, rate: rate, speed: speed };
+    }
+    // Canopy: level/slow descent below 5,000 ft, very slow (likely canopy ride or circuit)
+    if (alt !== null && alt < 5000 && alt > 500 && speed !== null && speed < 60) {
+      return { state: 'canopy', label: 'Canopy', icon: '🪂', alt: alt, rate: rate, speed: speed };
+    }
+    // Level flight (transit/circuit)
+    return { state: 'airborne', label: 'Level Flight', icon: '✈', alt: alt, rate: rate, speed: speed };
   }
 
   function renderAircraft() {
@@ -1210,6 +1243,7 @@ body {
       html += '<div class="' + chipClass + '">';
       html += '<span class="ac-reg">' + esc(reg) + '</span>';
       html += '<span class="ac-status-icon">' + status.icon + '</span>';
+      html += '<span class="ac-label">' + status.label + '</span>';
 
       if (status.alt !== null) {
         html += '<span class="ac-alt">' + Math.round(status.alt).toLocaleString() + ' ft</span>';
