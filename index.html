@@ -670,6 +670,10 @@ body {
         <input type="password" id="settingApiKey">
       </div>
       <div class="field">
+        <label>CORS Proxy URL</label>
+        <input type="text" id="settingProxy" placeholder="https://corsproxy.io/?url=">
+      </div>
+      <div class="field">
         <label>Refresh Interval (seconds)</label>
         <input type="number" id="settingInterval" min="5" max="300">
       </div>
@@ -689,13 +693,15 @@ body {
   const DEFAULT_DZ = 'dz_0kFFGQXAkk';
   const DEFAULT_KEY = 'bWFjY182ODZiZTVmODhjNjQ0NTYxOmFwaWtleV8zNGI3ZDY0YWVlZmJhODFjMzkwYTMxMjYzMTNhNzQyMg==';
   const DEFAULT_INTERVAL = 30;
+  const DEFAULT_PROXY = 'https://corsproxy.io/?url=';
   const BASE_URL = 'https://dz.goskydive.com';
 
   function loadConfig() {
     return {
       dzId: localStorage.getItem('hm_dz') || DEFAULT_DZ,
       apiKey: localStorage.getItem('hm_apiKey') || DEFAULT_KEY,
-      interval: parseInt(localStorage.getItem('hm_interval'), 10) || DEFAULT_INTERVAL
+      interval: parseInt(localStorage.getItem('hm_interval'), 10) || DEFAULT_INTERVAL,
+      proxy: localStorage.getItem('hm_proxy') !== null ? localStorage.getItem('hm_proxy') : DEFAULT_PROXY
     };
   }
 
@@ -703,6 +709,7 @@ body {
     localStorage.setItem('hm_dz', cfg.dzId);
     localStorage.setItem('hm_apiKey', cfg.apiKey);
     localStorage.setItem('hm_interval', cfg.interval);
+    localStorage.setItem('hm_proxy', cfg.proxy);
   }
 
   let config = loadConfig();
@@ -733,6 +740,7 @@ body {
   const $modal = document.getElementById('settingsModal');
   const $settingDz = document.getElementById('settingDz');
   const $settingApiKey = document.getElementById('settingApiKey');
+  const $settingProxy = document.getElementById('settingProxy');
   const $settingInterval = document.getElementById('settingInterval');
 
   // --- Clock ---
@@ -764,9 +772,12 @@ body {
     $errorBanner.classList.remove('visible');
 
     try {
+      var proxy = config.proxy || '';
+      var manifestUrl = BASE_URL + '/manifests?dropzone_id=' + config.dzId;
+      var weatherUrl = BASE_URL + '/calendar/weather-holds?dropzone_id=' + config.dzId + '&date=' + todayStr();
       const [manifestRes, weatherRes] = await Promise.all([
-        fetch(BASE_URL + '/manifests?dropzone_id=' + config.dzId, { headers: headers() }),
-        fetch(BASE_URL + '/calendar/weather-holds?dropzone_id=' + config.dzId + '&date=' + todayStr(), { headers: headers() })
+        fetch(proxy + encodeURIComponent(manifestUrl), { headers: headers() }),
+        fetch(proxy + encodeURIComponent(weatherUrl), { headers: headers() })
       ]);
 
       if (!manifestRes.ok) throw new Error('Manifest API returned ' + manifestRes.status);
@@ -1021,6 +1032,7 @@ body {
   $settingsBtn.addEventListener('click', function() {
     $settingDz.value = config.dzId;
     $settingApiKey.value = config.apiKey;
+    $settingProxy.value = config.proxy;
     $settingInterval.value = config.interval;
     $modal.classList.add('open');
   });
@@ -1036,6 +1048,7 @@ body {
   document.getElementById('settingsSave').addEventListener('click', function() {
     config.dzId = $settingDz.value;
     config.apiKey = $settingApiKey.value;
+    config.proxy = $settingProxy.value;
     config.interval = Math.max(5, parseInt($settingInterval.value, 10) || DEFAULT_INTERVAL);
     saveConfig(config);
     $modal.classList.remove('open');
