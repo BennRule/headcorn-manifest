@@ -1768,6 +1768,28 @@ body {
     }).join('');
   }
 
+  // --- Map with OSM tiles ---
+  var mapTilesLoaded = {};
+  var MAP_ZOOM = 13; // OSM zoom level — good detail for a DZ area
+
+  function lonToTileX(lon, zoom) { return Math.floor((lon + 180) / 360 * Math.pow(2, zoom)); }
+  function latToTileY(lat, zoom) {
+    var r = lat * Math.PI / 180;
+    return Math.floor((1 - Math.log(Math.tan(r) + 1 / Math.cos(r)) / Math.PI) / 2 * Math.pow(2, zoom));
+  }
+  function tileXToLon(x, zoom) { return x / Math.pow(2, zoom) * 360 - 180; }
+  function tileYToLat(y, zoom) {
+    var n = Math.PI - 2 * Math.PI * y / Math.pow(2, zoom);
+    return 180 / Math.PI * Math.atan(0.5 * (Math.exp(n) - Math.exp(-n)));
+  }
+
+  function latLonToPixel(lat, lon, zoom) {
+    var x = (lon + 180) / 360 * Math.pow(2, zoom) * 256;
+    var r = lat * Math.PI / 180;
+    var y = (1 - Math.log(Math.tan(r) + 1 / Math.cos(r)) / Math.PI) / 2 * Math.pow(2, zoom) * 256;
+    return [x, y];
+  }
+
   function renderMap() {
     var canvas = document.getElementById('dzMap');
     var label = document.getElementById('mapLabel');
@@ -1775,45 +1797,65 @@ body {
     var ctx = canvas.getContext('2d');
     var w = canvas.width;
     var h = canvas.height;
-    var dzLat = dzInfo.lat;
-    var dzLon = dzInfo.lon;
+    var zoom = MAP_ZOOM;
 
-    // Map extent: ~5nm around DZ (approx 0.08 degrees)
-    var range = 0.08;
+    // Centre pixel
+    var cp = latLonToPixel(dzInfo.lat, dzInfo.lon, zoom);
+    var ox = cp[0] - w / 2; // pixel offset for top-left
+    var oy = cp[1] - h / 2;
 
     function toXY(lat, lon) {
-      var x = ((lon - dzLon) / (range * 2) + 0.5) * w;
-      var y = (1 - ((lat - dzLat) / (range * 2) + 0.5)) * h;
-      return [x, y];
+      var p = latLonToPixel(lat, lon, zoom);
+      return [p[0] - ox, p[1] - oy];
     }
 
-    // Clear
-    ctx.fillStyle = '#f1f5f9';
+    // Determine which tiles we need
+    var tileSize = 256;
+    var startTileX = Math.floor(ox / tileSize);
+    var startTileY = Math.floor(oy / tileSize);
+    var endTileX = Math.floor((ox + w) / tileSize);
+    var endTileY = Math.floor((oy + h) / tileSize);
+
+    // Clear with base colour
+    ctx.fillStyle = '#e8e0d8';
     ctx.fillRect(0, 0, w, h);
 
-    // Grid lines
-    ctx.strokeStyle = '#e2e8f0';
-    ctx.lineWidth = 0.5;
-    for (var i = 0; i <= 4; i++) {
-      var gx = (w / 4) * i;
-      ctx.beginPath(); ctx.moveTo(gx, 0); ctx.lineTo(gx, h); ctx.stroke();
-      var gy = (h / 4) * i;
-      ctx.beginPath(); ctx.moveTo(0, gy); ctx.lineTo(w, gy); ctx.stroke();
+    // Draw cached tiles
+    for (var tx = startTileX; tx <= endTileX; tx++) {
+      for (var ty = startTileY; ty <= endTileY; ty++) {
+        var key = zoom + '/' + tx + '/' + ty;
+        var drawX = tx * tileSize - ox;
+        var drawY = ty * tileSize - oy;
+        if (mapTilesLoaded[key] && mapTilesLoaded[key].complete) {
+          ctx.drawImage(mapTilesLoaded[key], drawX, drawY, tileSize, tileSize);
+        } else if (!mapTilesLoaded[key]) {
+          // Load tile
+          var img = new Image();
+          img.crossOrigin = 'anonymous';
+          img.src = 'https://tile.openstreetmap.org/' + key + '.png';
+          mapTilesLoaded[key] = img;
+          img.onload = function() { renderMap(); }; // Re-render when loaded
+        }
+      }
     }
 
-    // DZ marker (centre cross + circle)
-    var dzXY = toXY(dzLat, dzLon);
+    // DZ marker (crosshair)
+    var dzXY = toXY(dzInfo.lat, dzInfo.lon);
     ctx.strokeStyle = '#ef4444';
-    ctx.lineWidth = 2;
-    ctx.beginPath(); ctx.arc(dzXY[0], dzXY[1], 8, 0, Math.PI * 2); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(dzXY[0] - 12, dzXY[1]); ctx.lineTo(dzXY[0] + 12, dzXY[1]); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(dzXY[0], dzXY[1] - 12); ctx.lineTo(dzXY[0], dzXY[1] + 12); ctx.stroke();
+    ctx.lineWidth = 2.5;
+    ctx.beginPath(); ctx.arc(dzXY[0], dzXY[1], 10, 0, Math.PI * 2); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(dzXY[0] - 15, dzXY[1]); ctx.lineTo(dzXY[0] + 15, dzXY[1]); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(dzXY[0], dzXY[1] - 15); ctx.lineTo(dzXY[0], dzXY[1] + 15); ctx.stroke();
 
-    // DZ label
-    ctx.fillStyle = '#64748b';
-    ctx.font = '600 10px "Barlow Condensed", sans-serif';
+    // DZ label with background
+    ctx.font = '700 11px "Barlow Condensed", sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText(dzInfo.name.toUpperCase(), dzXY[0], dzXY[1] + 22);
+    var dzText = dzInfo.name.toUpperCase();
+    var tw = ctx.measureText(dzText).width;
+    ctx.fillStyle = 'rgba(255,255,255,0.85)';
+    ctx.fillRect(dzXY[0] - tw / 2 - 3, dzXY[1] + 14, tw + 6, 14);
+    ctx.fillStyle = '#ef4444';
+    ctx.fillText(dzText, dzXY[0], dzXY[1] + 25);
 
     // Aircraft
     var acCount = 0;
@@ -1821,37 +1863,51 @@ body {
       var ac = aircraftLive[reg];
       if (!ac || !ac.lat || !ac.lon || ac.on_ground) return;
       var xy = toXY(ac.lat, ac.lon);
-      if (xy[0] < -20 || xy[0] > w + 20 || xy[1] < -20 || xy[1] > h + 20) return;
+      if (xy[0] < -30 || xy[0] > w + 30 || xy[1] < -30 || xy[1] > h + 30) return;
       acCount++;
 
       var status = getAircraftStatus(reg);
       var color = status.state === 'climbing' ? '#22c55e' : status.state === 'run-in' ? '#ef4444' : status.state === 'descending' ? '#f59e0b' : '#3b82f6';
 
-      // Draw aircraft icon (triangle pointing in track direction)
-      var track = (ac.track || 0) * Math.PI / 180;
+      // Shadow
       ctx.save();
+      ctx.shadowColor = 'rgba(0,0,0,0.3)';
+      ctx.shadowBlur = 4;
+
+      // Aircraft triangle
+      var track = (ac.track || 0) * Math.PI / 180;
       ctx.translate(xy[0], xy[1]);
       ctx.rotate(track);
       ctx.fillStyle = color;
       ctx.beginPath();
-      ctx.moveTo(0, -8);
-      ctx.lineTo(-5, 6);
-      ctx.lineTo(5, 6);
+      ctx.moveTo(0, -10);
+      ctx.lineTo(-6, 8);
+      ctx.lineTo(6, 8);
       ctx.closePath();
       ctx.fill();
       ctx.restore();
 
-      // Label
-      ctx.fillStyle = color;
-      ctx.font = '700 9px "Barlow Condensed", sans-serif';
+      // Label with background
+      ctx.font = '700 10px "Barlow Condensed", sans-serif';
       ctx.textAlign = 'left';
-      var altText = status.alt ? Math.round(status.alt / 100) + '' : '';
-      ctx.fillText(reg + (altText ? ' ' + altText : ''), xy[0] + 8, xy[1] + 3);
+      var altText = status.alt ? ' ' + Math.round(status.alt / 100) : '';
+      var labelText = reg + altText;
+      var lw = ctx.measureText(labelText).width;
+      ctx.fillStyle = 'rgba(255,255,255,0.85)';
+      ctx.fillRect(xy[0] + 10, xy[1] - 6, lw + 4, 13);
+      ctx.fillStyle = color;
+      ctx.fillText(labelText, xy[0] + 12, xy[1] + 4);
     });
 
     if (label) {
       label.textContent = acCount > 0 ? acCount + ' aircraft tracked' : 'No aircraft in range';
     }
+
+    // OSM attribution
+    ctx.fillStyle = 'rgba(0,0,0,0.4)';
+    ctx.font = '8px sans-serif';
+    ctx.textAlign = 'right';
+    ctx.fillText('© OpenStreetMap', w - 4, h - 3);
   }
 
   function renderLastUpdated() {
