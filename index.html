@@ -1246,6 +1246,11 @@ body {
     return div.innerHTML;
   }
 
+  function normaliseTeamName(name) {
+    if (!name) return null;
+    return name.trim().toLowerCase().split(/\s+and\s+/).sort().join(' & ');
+  }
+
   function findBySetEid(arr, setEid) {
     return arr.filter(function(x) { return x.setEid === setEid; });
   }
@@ -1421,13 +1426,15 @@ body {
       if (tandemCustomers.length > 0) {
         tandemHtml = '<div class="section-label">Tandems</div>';
 
-        // Group by team
+        // Group by team (normalised)
         var teamMap = {};
+        var teamDisplayNames = {};
         var noTeam = [];
         tandemCustomers.forEach(function(cust) {
-          if (cust.teamName) {
-            if (!teamMap[cust.teamName]) teamMap[cust.teamName] = [];
-            teamMap[cust.teamName].push(cust);
+          var key = normaliseTeamName(cust.teamName);
+          if (key) {
+            if (!teamMap[key]) { teamMap[key] = []; teamDisplayNames[key] = cust.teamName; }
+            teamMap[key].push(cust);
           } else {
             noTeam.push(cust);
           }
@@ -1466,9 +1473,9 @@ body {
         }
 
         // Render teams first
-        Object.keys(teamMap).forEach(function(team) {
-          tandemHtml += '<div class="team-group"><div class="team-group-name">' + esc(team) + '</div>';
-          teamMap[team].forEach(function(cust) { tandemHtml += renderTandemRow(cust); });
+        Object.keys(teamMap).forEach(function(key) {
+          tandemHtml += '<div class="team-group"><div class="team-group-name">' + esc(teamDisplayNames[key]) + '</div>';
+          teamMap[key].forEach(function(cust) { tandemHtml += renderTandemRow(cust); });
           tandemHtml += '</div>';
         });
         // Then ungrouped
@@ -1511,11 +1518,13 @@ body {
 
         // Sports customers (club jumpers) — grouped by team
         var sportTeamMap = {};
+        var sportTeamDisplayNames = {};
         var sportNoTeam = [];
         sportsCustomers.forEach(function(cust) {
-          if (cust.teamName) {
-            if (!sportTeamMap[cust.teamName]) sportTeamMap[cust.teamName] = [];
-            sportTeamMap[cust.teamName].push(cust);
+          var key = normaliseTeamName(cust.teamName);
+          if (key) {
+            if (!sportTeamMap[key]) { sportTeamMap[key] = []; sportTeamDisplayNames[key] = cust.teamName; }
+            sportTeamMap[key].push(cust);
           } else {
             sportNoTeam.push(cust);
           }
@@ -1550,9 +1559,9 @@ body {
         }
 
         // Render sport teams first
-        Object.keys(sportTeamMap).forEach(function(team) {
-          sportsHtml += '<div class="team-group"><div class="team-group-name">' + esc(team) + '</div>';
-          sportTeamMap[team].forEach(function(cust) { sportsHtml += renderSportCustomerRow(cust); });
+        Object.keys(sportTeamMap).forEach(function(key) {
+          sportsHtml += '<div class="team-group"><div class="team-group-name">' + esc(sportTeamDisplayNames[key]) + '</div>';
+          sportTeamMap[key].forEach(function(cust) { sportsHtml += renderSportCustomerRow(cust); });
           sportsHtml += '</div>';
         });
         // Then ungrouped
