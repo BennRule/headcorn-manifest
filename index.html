@@ -1,0 +1,1059 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Headcorn Manifest</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=Barlow+Condensed:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --slate-900: #1e293b;
+  --slate-800: #1e293b;
+  --slate-700: #334155;
+  --slate-600: #475569;
+  --slate-500: #64748b;
+  --slate-400: #94a3b8;
+  --slate-300: #cbd5e1;
+  --slate-200: #e2e8f0;
+  --slate-100: #f1f5f9;
+  --slate-50: #f8fafc;
+  --blue-500: #3b82f6;
+  --blue-100: #dbeafe;
+  --blue-50: #eff6ff;
+  --amber-500: #f59e0b;
+  --amber-100: #fef3c7;
+  --amber-50: #fffbeb;
+  --green-500: #22c55e;
+  --green-100: #dcfce7;
+  --green-50: #f0fdf4;
+  --red-500: #ef4444;
+  --red-100: #fee2e2;
+  --grey-400: #9ca3af;
+  --grey-200: #e5e7eb;
+  --grey-100: #f3f4f6;
+}
+
+body {
+  font-family: 'Barlow', sans-serif;
+  background: var(--slate-100);
+  color: var(--slate-800);
+  min-height: 100vh;
+}
+
+/* Header */
+.header {
+  background: var(--slate-900);
+  color: white;
+  padding: 0 24px;
+  height: 56px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+
+.header-title {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 700;
+  font-size: 20px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.header-clock {
+  font-family: 'DM Mono', monospace;
+  font-size: 18px;
+  font-weight: 500;
+  color: var(--slate-300);
+  margin-left: auto;
+}
+
+.header-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--slate-400);
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--green-500);
+  flex-shrink: 0;
+}
+
+.status-dot.error { background: var(--red-500); }
+.status-dot.loading { background: var(--amber-500); animation: pulse 1s infinite; }
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+.header-btn {
+  background: none;
+  border: 1px solid var(--slate-600);
+  color: var(--slate-300);
+  width: 36px;
+  height: 36px;
+  border-radius: 6px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s;
+}
+
+.header-btn:hover { background: var(--slate-700); }
+
+.header-btn svg { width: 18px; height: 18px; fill: currentColor; }
+
+/* Metrics bar */
+.metrics-bar {
+  background: white;
+  border-bottom: 1px solid var(--slate-200);
+  padding: 12px 24px;
+  display: flex;
+  gap: 32px;
+  flex-wrap: wrap;
+}
+
+.metric {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.metric-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--slate-500);
+  font-family: 'Barlow Condensed', sans-serif;
+}
+
+.metric-value {
+  font-family: 'DM Mono', monospace;
+  font-size: 22px;
+  font-weight: 500;
+  line-height: 1;
+}
+
+.metric-value.blue { color: var(--blue-500); }
+.metric-value.amber { color: var(--amber-500); }
+.metric-value.green { color: var(--green-500); }
+.metric-value.grey { color: var(--grey-400); }
+
+/* Banners */
+.banner-container { display: flex; flex-direction: column; }
+
+.banner {
+  padding: 10px 24px;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 600;
+  font-size: 16px;
+  letter-spacing: 0.5px;
+  display: none;
+}
+
+.banner.visible { display: block; }
+
+.banner-weather {
+  background: var(--red-500);
+  color: white;
+}
+
+.banner-message {
+  background: var(--amber-100);
+  color: #92400e;
+  border-bottom: 1px solid #fcd34d;
+}
+
+.banner-error {
+  background: var(--red-100);
+  color: #991b1b;
+  font-family: 'Barlow', sans-serif;
+  font-weight: 500;
+  font-size: 14px;
+}
+
+/* Main layout */
+.main {
+  display: flex;
+  gap: 0;
+  min-height: calc(100vh - 56px - 60px);
+}
+
+.loads-area {
+  flex: 1;
+  padding: 20px 24px;
+  min-width: 0;
+}
+
+.loads-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
+  gap: 16px;
+}
+
+/* Load card */
+.load-card {
+  background: white;
+  border-radius: 8px;
+  border-top: 4px solid var(--green-500);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+  overflow: hidden;
+}
+
+.load-card[data-status="airborne"] { border-top-color: var(--blue-500); }
+.load-card[data-status="trained"] { border-top-color: var(--amber-500); }
+.load-card[data-status="candidate"] { border-top-color: var(--green-500); }
+.load-card[data-status="landedComplete"] { border-top-color: var(--grey-400); opacity: 0.6; }
+.load-card[data-status="draft"] { border-top-color: var(--grey-200); opacity: 0.35; }
+
+.card-header {
+  padding: 12px 16px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border-bottom: 1px solid var(--slate-100);
+}
+
+.lift-number {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 700;
+  font-size: 20px;
+  color: var(--slate-800);
+}
+
+.status-badge {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 600;
+  font-size: 11px;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  padding: 3px 8px;
+  border-radius: 4px;
+}
+
+.status-badge.airborne { background: var(--blue-100); color: #1d4ed8; }
+.status-badge.trained { background: var(--amber-100); color: #92400e; }
+.status-badge.candidate { background: var(--green-100); color: #166534; }
+.status-badge.landedComplete { background: var(--grey-200); color: var(--slate-600); }
+.status-badge.draft { background: var(--grey-100); color: var(--grey-400); }
+
+.card-meta {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-family: 'DM Mono', monospace;
+  font-size: 13px;
+  color: var(--slate-500);
+}
+
+.card-meta .alt-tag {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 600;
+  font-size: 12px;
+  background: var(--slate-100);
+  color: var(--slate-600);
+  padding: 2px 6px;
+  border-radius: 3px;
+}
+
+.jumper-count {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.jumper-count svg { width: 14px; height: 14px; fill: var(--slate-400); }
+
+.card-body { padding: 10px 16px 14px; }
+
+.section-label {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 600;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--slate-400);
+  margin-bottom: 6px;
+  margin-top: 10px;
+}
+
+.section-label:first-child { margin-top: 0; }
+
+.tandem-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 5px 0;
+  border-bottom: 1px solid var(--slate-50);
+}
+
+.tandem-row:last-child { border-bottom: none; }
+
+.tandem-info { flex: 1; min-width: 0; }
+
+.tandem-customer {
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--slate-800);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tandem-crew {
+  font-size: 12px;
+  color: var(--slate-500);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tandem-tags {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.tag {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 600;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  padding: 2px 5px;
+  border-radius: 3px;
+  white-space: nowrap;
+}
+
+.tag-alt { background: var(--slate-100); color: var(--slate-600); }
+.tag-hc { background: #dbeafe; color: #1d4ed8; }
+.tag-ff { background: #ede9fe; color: #6d28d9; }
+.tag-nosig { background: var(--red-100); color: #991b1b; }
+.tag-note { background: var(--amber-100); color: #92400e; max-width: 180px; overflow: hidden; text-overflow: ellipsis; }
+.tag-bpa { font-size: 11px; padding: 2px 7px; border-radius: 10px; font-weight: 700; }
+.tag-bpa-a { background: #dcfce7; color: #166534; }
+.tag-bpa-b { background: #dbeafe; color: #1d4ed8; }
+.tag-bpa-c { background: #fef3c7; color: #92400e; }
+.tag-bpa-d { background: #ede9fe; color: #6d28d9; }
+
+.sport-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--slate-50);
+  font-size: 14px;
+}
+
+.sport-row:last-child { border-bottom: none; }
+
+.sport-name { flex: 1; font-weight: 500; }
+
+/* Sidebar */
+.sidebar {
+  width: 300px;
+  background: white;
+  border-left: 1px solid var(--slate-200);
+  flex-shrink: 0;
+  overflow-y: auto;
+}
+
+.sidebar-header {
+  background: var(--slate-900);
+  color: white;
+  padding: 16px;
+}
+
+.sidebar-title {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 700;
+  font-size: 16px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+.sidebar-sub {
+  font-size: 12px;
+  color: var(--slate-400);
+  margin-top: 4px;
+}
+
+.sidebar-list { padding: 8px 0; }
+
+.sidebar-item {
+  padding: 8px 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border-bottom: 1px solid var(--slate-50);
+}
+
+.sidebar-item:last-child { border-bottom: none; }
+
+.sidebar-name {
+  flex: 1;
+  font-weight: 500;
+  font-size: 14px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sidebar-badges { display: flex; gap: 4px; flex-shrink: 0; }
+
+.cam-badge {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 700;
+  font-size: 10px;
+  padding: 2px 5px;
+  border-radius: 3px;
+  letter-spacing: 0.3px;
+}
+
+.cam-badge.hc { background: #dbeafe; color: #1d4ed8; }
+.cam-badge.ff { background: #ede9fe; color: #6d28d9; }
+
+.empty-state {
+  padding: 40px 24px;
+  text-align: center;
+  color: var(--slate-400);
+  font-size: 14px;
+}
+
+.last-updated {
+  font-size: 11px;
+  color: var(--slate-400);
+  text-align: right;
+  padding: 8px 24px 0;
+  font-family: 'DM Mono', monospace;
+}
+
+/* Settings modal */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.5);
+  z-index: 200;
+  display: none;
+  align-items: center;
+  justify-content: center;
+}
+
+.modal-overlay.open { display: flex; }
+
+.modal {
+  background: white;
+  border-radius: 10px;
+  width: 420px;
+  max-width: 90vw;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+}
+
+.modal-header {
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--slate-200);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.modal-header h2 {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 700;
+  font-size: 18px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.modal-close {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--slate-400);
+  font-size: 20px;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+}
+
+.modal-close:hover { background: var(--slate-100); }
+
+.modal-body { padding: 20px; }
+
+.field { margin-bottom: 16px; }
+
+.field label {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--slate-600);
+  margin-bottom: 6px;
+  font-family: 'Barlow Condensed', sans-serif;
+}
+
+.field select, .field input {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid var(--slate-300);
+  border-radius: 6px;
+  font-family: 'Barlow', sans-serif;
+  font-size: 14px;
+  color: var(--slate-800);
+  background: white;
+}
+
+.field select:focus, .field input:focus {
+  outline: none;
+  border-color: var(--blue-500);
+  box-shadow: 0 0 0 2px rgba(59,130,246,0.15);
+}
+
+.modal-footer {
+  padding: 16px 20px;
+  border-top: 1px solid var(--slate-200);
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.btn {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 600;
+  font-size: 14px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 8px 20px;
+  border-radius: 6px;
+  border: none;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.btn-primary { background: var(--blue-500); color: white; }
+.btn-primary:hover { background: #2563eb; }
+.btn-secondary { background: var(--slate-100); color: var(--slate-600); }
+.btn-secondary:hover { background: var(--slate-200); }
+
+/* Responsive */
+@media (max-width: 900px) {
+  .main { flex-direction: column; }
+  .sidebar { width: 100%; border-left: none; border-top: 1px solid var(--slate-200); }
+  .loads-grid { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 600px) {
+  .header { padding: 0 12px; gap: 8px; }
+  .header-title { font-size: 16px; letter-spacing: 1px; }
+  .metrics-bar { padding: 10px 12px; gap: 16px; }
+  .loads-area { padding: 12px; }
+  .loads-grid { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+
+<!-- Header -->
+<header class="header">
+  <div class="header-title">Headcorn Manifest</div>
+  <div class="header-clock" id="clock">--:--:--</div>
+  <div class="header-status">
+    <span class="status-dot" id="statusDot"></span>
+    <span id="statusText">Connecting</span>
+  </div>
+  <button class="header-btn" id="refreshBtn" title="Refresh now">
+    <svg viewBox="0 0 24 24"><path d="M17.65 6.35A7.96 7.96 0 0012 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0112 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg>
+  </button>
+  <button class="header-btn" id="settingsBtn" title="Settings">
+    <svg viewBox="0 0 24 24"><path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58a.49.49 0 00.12-.61l-1.92-3.32a.49.49 0 00-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54a.48.48 0 00-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96a.49.49 0 00-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.07.62-.07.94s.02.64.07.94l-2.03 1.58a.49.49 0 00-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6A3.6 3.6 0 1115.6 12 3.6 3.6 0 0112 15.6z"/></svg>
+  </button>
+</header>
+
+<!-- Metrics bar -->
+<div class="metrics-bar" id="metricsBar">
+  <div class="metric">
+    <span class="metric-label">In Air</span>
+    <span class="metric-value blue" id="metricAirborne">0</span>
+  </div>
+  <div class="metric">
+    <span class="metric-label">Kit On</span>
+    <span class="metric-value amber" id="metricTrained">0</span>
+  </div>
+  <div class="metric">
+    <span class="metric-label">Manifested</span>
+    <span class="metric-value green" id="metricCandidate">0</span>
+  </div>
+  <div class="metric">
+    <span class="metric-label">Landed</span>
+    <span class="metric-value grey" id="metricLanded">0</span>
+  </div>
+  <div class="metric">
+    <span class="metric-label">Total Tandems</span>
+    <span class="metric-value" id="metricTandems">0</span>
+  </div>
+  <div class="metric">
+    <span class="metric-label">Total Sports</span>
+    <span class="metric-value" id="metricSports">0</span>
+  </div>
+</div>
+
+<!-- Banners -->
+<div class="banner-container">
+  <div class="banner banner-weather" id="weatherBanner">&#9888; WEATHER HOLD ACTIVE</div>
+  <div class="banner banner-message" id="messageBanner"></div>
+  <div class="banner banner-error" id="errorBanner"></div>
+</div>
+
+<!-- Main content -->
+<div class="main">
+  <div class="loads-area">
+    <div class="last-updated" id="lastUpdated"></div>
+    <div class="loads-grid" id="loadsGrid">
+      <div class="empty-state">Loading manifest data&hellip;</div>
+    </div>
+  </div>
+  <aside class="sidebar">
+    <div class="sidebar-header">
+      <div class="sidebar-title">Tandem Skydivers</div>
+      <div class="sidebar-sub">Upgrade your experience with a camera package</div>
+    </div>
+    <div class="sidebar-list" id="sidebarList">
+      <div class="empty-state">No active tandems</div>
+    </div>
+  </aside>
+</div>
+
+<!-- Settings modal -->
+<div class="modal-overlay" id="settingsModal">
+  <div class="modal">
+    <div class="modal-header">
+      <h2>Settings</h2>
+      <button class="modal-close" id="modalClose">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div class="field">
+        <label>Dropzone</label>
+        <select id="settingDz">
+          <option value="dz_0kFFGQXAkk">Headcorn</option>
+          <option value="dz_0dropzone1">Old Sarum</option>
+          <option value="dz_0rU8gA2pHO">Swansea</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>API Key</label>
+        <input type="password" id="settingApiKey">
+      </div>
+      <div class="field">
+        <label>Refresh Interval (seconds)</label>
+        <input type="number" id="settingInterval" min="5" max="300">
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" id="settingsCancel">Cancel</button>
+      <button class="btn btn-primary" id="settingsSave">Save</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function() {
+  'use strict';
+
+  // --- Config ---
+  const DEFAULT_DZ = 'dz_0kFFGQXAkk';
+  const DEFAULT_KEY = 'bWFjY182ODZiZTVmODhjNjQ0NTYxOmFwaWtleV8zNGI3ZDY0YWVlZmJhODFjMzkwYTMxMjYzMTNhNzQyMg==';
+  const DEFAULT_INTERVAL = 30;
+  const BASE_URL = 'https://dz.goskydive.com';
+
+  function loadConfig() {
+    return {
+      dzId: localStorage.getItem('hm_dz') || DEFAULT_DZ,
+      apiKey: localStorage.getItem('hm_apiKey') || DEFAULT_KEY,
+      interval: parseInt(localStorage.getItem('hm_interval'), 10) || DEFAULT_INTERVAL
+    };
+  }
+
+  function saveConfig(cfg) {
+    localStorage.setItem('hm_dz', cfg.dzId);
+    localStorage.setItem('hm_apiKey', cfg.apiKey);
+    localStorage.setItem('hm_interval', cfg.interval);
+  }
+
+  let config = loadConfig();
+  let pollTimer = null;
+  let manifests = [];
+  let weatherHold = false;
+  let wallboardMsg = null;
+  let lastUpdateTime = null;
+
+  // --- DOM refs ---
+  const $clock = document.getElementById('clock');
+  const $statusDot = document.getElementById('statusDot');
+  const $statusText = document.getElementById('statusText');
+  const $refreshBtn = document.getElementById('refreshBtn');
+  const $settingsBtn = document.getElementById('settingsBtn');
+  const $metricsAirborne = document.getElementById('metricAirborne');
+  const $metricsTrained = document.getElementById('metricTrained');
+  const $metricsCandidate = document.getElementById('metricCandidate');
+  const $metricsLanded = document.getElementById('metricLanded');
+  const $metricsTandems = document.getElementById('metricTandems');
+  const $metricsSports = document.getElementById('metricSports');
+  const $weatherBanner = document.getElementById('weatherBanner');
+  const $messageBanner = document.getElementById('messageBanner');
+  const $errorBanner = document.getElementById('errorBanner');
+  const $loadsGrid = document.getElementById('loadsGrid');
+  const $sidebarList = document.getElementById('sidebarList');
+  const $lastUpdated = document.getElementById('lastUpdated');
+  const $modal = document.getElementById('settingsModal');
+  const $settingDz = document.getElementById('settingDz');
+  const $settingApiKey = document.getElementById('settingApiKey');
+  const $settingInterval = document.getElementById('settingInterval');
+
+  // --- Clock ---
+  function updateClock() {
+    const now = new Date();
+    $clock.textContent = now.toLocaleTimeString('en-GB', { hour12: false });
+  }
+  setInterval(updateClock, 1000);
+  updateClock();
+
+  // --- Status ---
+  function setStatus(state, text) {
+    $statusDot.className = 'status-dot ' + (state === 'ok' ? '' : state);
+    $statusText.textContent = text || (state === 'ok' ? 'Live' : state === 'error' ? 'Error' : 'Loading');
+  }
+
+  // --- Fetch helpers ---
+  function headers() {
+    return { 'Authorization': 'Basic ' + config.apiKey };
+  }
+
+  function todayStr() {
+    const d = new Date();
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+  }
+
+  async function fetchData() {
+    setStatus('loading', 'Updating');
+    $errorBanner.classList.remove('visible');
+
+    try {
+      const [manifestRes, weatherRes] = await Promise.all([
+        fetch(BASE_URL + '/manifests?dropzone_id=' + config.dzId, { headers: headers() }),
+        fetch(BASE_URL + '/calendar/weather-holds?dropzone_id=' + config.dzId + '&date=' + todayStr(), { headers: headers() })
+      ]);
+
+      if (!manifestRes.ok) throw new Error('Manifest API returned ' + manifestRes.status);
+      if (!weatherRes.ok) throw new Error('Weather API returned ' + weatherRes.status);
+
+      const manifestData = await manifestRes.json();
+      const weatherData = await weatherRes.json();
+
+      const today = todayStr();
+      manifests = (manifestData.manifestCollection || []).filter(function(m) {
+        return m.dropzoneId === config.dzId && m.manifestDate === today;
+      });
+
+      weatherHold = weatherData.isOnWeatherHold || false;
+      wallboardMsg = weatherData.wallboardMessage || null;
+
+      lastUpdateTime = new Date();
+      setStatus('ok', 'Live');
+      render();
+    } catch (err) {
+      setStatus('error', 'Error');
+      var msg = err.message || 'Unknown error';
+      if (msg.toLowerCase().includes('failed to fetch') || msg.toLowerCase().includes('networkerror')) {
+        msg += ' — If CORS is blocking the request, try opening the official GoSkydive wallboard first to establish a session, or use a CORS proxy.';
+      }
+      $errorBanner.textContent = msg;
+      $errorBanner.classList.add('visible');
+      if (lastUpdateTime) render();
+    }
+  }
+
+  // --- Sort order ---
+  var statusOrder = { airborne: 0, trained: 1, candidate: 2, landedComplete: 3, draft: 4 };
+
+  function sortManifests(arr) {
+    return arr.slice().sort(function(a, b) {
+      var sa = statusOrder[a.manifestStatus] !== undefined ? statusOrder[a.manifestStatus] : 5;
+      var sb = statusOrder[b.manifestStatus] !== undefined ? statusOrder[b.manifestStatus] : 5;
+      if (sa !== sb) return sa - sb;
+      return (a.liftNumber || 999) - (b.liftNumber || 999);
+    });
+  }
+
+  // --- Helpers ---
+  var statusLabels = { airborne: 'In Air', trained: 'Kit On', candidate: 'Manifested', landedComplete: 'Landed', draft: 'Draft' };
+
+  function fmtTime(iso) {
+    if (!iso) return null;
+    var d = new Date(iso);
+    return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+  }
+
+  function fmtAlt(ft) {
+    if (!ft) return '';
+    return Math.round(ft / 1000) + 'k';
+  }
+
+  function esc(s) {
+    if (!s) return '';
+    var div = document.createElement('div');
+    div.textContent = s;
+    return div.innerHTML;
+  }
+
+  function findBySetEid(arr, setEid) {
+    return arr.filter(function(x) { return x.setEid === setEid; });
+  }
+
+  // --- Render ---
+  function render() {
+    renderMetrics();
+    renderBanners();
+    renderLoads();
+    renderSidebar();
+    renderLastUpdated();
+  }
+
+  function renderMetrics() {
+    var airborne = 0, trained = 0, candidate = 0, landed = 0, tandems = 0, sports = 0;
+    manifests.forEach(function(m) {
+      switch (m.manifestStatus) {
+        case 'airborne': airborne++; break;
+        case 'trained': trained++; break;
+        case 'candidate': candidate++; break;
+        case 'landedComplete': landed++; break;
+      }
+      (m.customers || []).forEach(function(c) {
+        if (c.customerRole === 'tandem') tandems++;
+      });
+      (m.colleagues || []).forEach(function(c) {
+        if (c.colleagueRole === 'sportsSolo') sports++;
+      });
+    });
+    $metricsAirborne.textContent = airborne;
+    $metricsTrained.textContent = trained;
+    $metricsCandidate.textContent = candidate;
+    $metricsLanded.textContent = landed;
+    $metricsTandems.textContent = tandems;
+    $metricsSports.textContent = sports;
+  }
+
+  function renderBanners() {
+    $weatherBanner.classList.toggle('visible', weatherHold);
+    if (wallboardMsg) {
+      $messageBanner.textContent = wallboardMsg;
+      $messageBanner.classList.add('visible');
+    } else {
+      $messageBanner.classList.remove('visible');
+    }
+  }
+
+  function renderLoads() {
+    var sorted = sortManifests(manifests);
+    if (sorted.length === 0) {
+      $loadsGrid.innerHTML = '<div class="empty-state">No loads for today</div>';
+      return;
+    }
+
+    $loadsGrid.innerHTML = sorted.map(function(m) {
+      var sets = m.sets || [];
+      var customers = m.customers || [];
+      var colleagues = m.colleagues || [];
+      var firstSet = sets[0];
+      var alt = firstSet ? fmtAlt(firstSet.jumpAltitudeInFt) : '';
+      var totalJumpers = (m.customerCount || 0) + (m.colleagueCount || 0);
+      var statusClass = m.manifestStatus;
+      var statusLabel = statusLabels[m.manifestStatus] || m.manifestStatus;
+
+      // Times
+      var takeoff = fmtTime(m.takeOffDateTime);
+      var landed = fmtTime(m.landedDateTime);
+      var timeStr = '';
+      if (takeoff) timeStr += takeoff;
+      if (landed) timeStr += (timeStr ? ' &rarr; ' : '') + landed;
+
+      // Tandems
+      var tandemCustomers = customers.filter(function(c) { return c.customerRole === 'tandem'; });
+      var tandemHtml = '';
+      if (tandemCustomers.length > 0) {
+        tandemHtml = '<div class="section-label">Tandems</div>';
+        tandemCustomers.forEach(function(cust) {
+          var setColleagues = findBySetEid(colleagues, cust.setEid);
+          var instructor = setColleagues.find(function(c) { return c.colleagueRole === 'tandemInstructor' || c.colleagueRole === 'tandemInstructorWithHandcam'; });
+          var videographer = setColleagues.find(function(c) { return c.colleagueRole === 'tandemVideographer'; });
+          var custSet = sets.find(function(s) { return s.eid === cust.setEid; });
+          var custAlt = custSet ? fmtAlt(custSet.jumpAltitudeInFt) : '';
+          var isHandcam = instructor && instructor.colleagueRole === 'tandemInstructorWithHandcam';
+
+          var crewParts = [];
+          if (instructor) crewParts.push(esc(instructor.fullName));
+          if (videographer) crewParts.push(esc(videographer.fullName));
+
+          var tags = '';
+          if (custAlt) tags += '<span class="tag tag-alt">' + custAlt + '</span>';
+          if (isHandcam) tags += '<span class="tag tag-hc">HC</span>';
+          if (videographer) tags += '<span class="tag tag-ff">FF</span>';
+          if (!cust.fitSignatureFileLocation) tags += '<span class="tag tag-nosig">No sig</span>';
+          if (cust.prominantNote) tags += '<span class="tag tag-note" title="' + esc(cust.prominantNote) + '">' + esc(cust.prominantNote) + '</span>';
+
+          tandemHtml += '<div class="tandem-row">' +
+            '<div class="tandem-info">' +
+              '<div class="tandem-customer">' + esc(cust.fullName) + '</div>' +
+              (crewParts.length ? '<div class="tandem-crew">' + crewParts.join(' &bull; ') + '</div>' : '') +
+            '</div>' +
+            '<div class="tandem-tags">' + tags + '</div>' +
+          '</div>';
+        });
+      }
+
+      // Sports
+      var sportsColleagues = colleagues.filter(function(c) { return c.colleagueRole === 'sportsSolo'; });
+      var sportsHtml = '';
+      if (sportsColleagues.length > 0) {
+        sportsHtml = '<div class="section-label">Sports</div>';
+        sportsColleagues.forEach(function(col) {
+          var colSet = sets.find(function(s) { return s.eid === col.setEid; });
+          var colAlt = colSet ? fmtAlt(colSet.jumpAltitudeInFt) : '';
+          var bpa = col.bpaLicenseType;
+          var bpaBadge = bpa ? '<span class="tag tag-bpa tag-bpa-' + bpa + '">' + bpa.toUpperCase() + '</span>' : '';
+          sportsHtml += '<div class="sport-row">' +
+            '<span class="sport-name">' + esc(col.fullName) + '</span>' +
+            bpaBadge +
+            (colAlt ? '<span class="tag tag-alt">' + colAlt + '</span>' : '') +
+          '</div>';
+        });
+      }
+
+      var hasBody = tandemHtml || sportsHtml;
+
+      return '<div class="load-card" data-status="' + statusClass + '">' +
+        '<div class="card-header">' +
+          '<span class="lift-number">' + (m.liftNumber != null ? 'Lift #' + m.liftNumber : 'Unscheduled') + '</span>' +
+          '<span class="status-badge ' + statusClass + '">' + statusLabel + '</span>' +
+          '<div class="card-meta">' +
+            (timeStr ? '<span>' + timeStr + '</span>' : '') +
+            (alt ? '<span class="alt-tag">' + alt + '</span>' : '') +
+            '<span class="jumper-count"><svg viewBox="0 0 24 24"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/></svg> ' + totalJumpers + '</span>' +
+          '</div>' +
+        '</div>' +
+        (hasBody ? '<div class="card-body">' + tandemHtml + sportsHtml + '</div>' : '') +
+      '</div>';
+    }).join('');
+  }
+
+  function renderSidebar() {
+    var items = [];
+    manifests.forEach(function(m) {
+      if (m.manifestStatus === 'draft' || m.manifestStatus === 'landedComplete') return;
+      var customers = m.customers || [];
+      var sets = m.sets || [];
+      customers.forEach(function(c) {
+        if (c.customerRole !== 'tandem') return;
+        var custSet = sets.find(function(s) { return s.eid === c.setEid; });
+        items.push({
+          name: c.fullName,
+          hc: custSet ? custSet.requiresCameraHandcam : false,
+          ff: custSet ? custSet.requiresCameraFreefall : false
+        });
+      });
+    });
+
+    if (items.length === 0) {
+      $sidebarList.innerHTML = '<div class="empty-state">No active tandems</div>';
+      return;
+    }
+
+    $sidebarList.innerHTML = items.map(function(item) {
+      var badges = '';
+      if (item.hc) badges += '<span class="cam-badge hc">HC</span>';
+      if (item.ff) badges += '<span class="cam-badge ff">FF</span>';
+      return '<div class="sidebar-item">' +
+        '<span class="sidebar-name">' + esc(item.name) + '</span>' +
+        (badges ? '<div class="sidebar-badges">' + badges + '</div>' : '') +
+      '</div>';
+    }).join('');
+  }
+
+  function renderLastUpdated() {
+    if (lastUpdateTime) {
+      $lastUpdated.textContent = 'Last updated ' + lastUpdateTime.toLocaleTimeString('en-GB', { hour12: false });
+    }
+  }
+
+  // --- Polling ---
+  function startPolling() {
+    if (pollTimer) clearInterval(pollTimer);
+    fetchData();
+    pollTimer = setInterval(fetchData, config.interval * 1000);
+  }
+
+  // --- Settings ---
+  $settingsBtn.addEventListener('click', function() {
+    $settingDz.value = config.dzId;
+    $settingApiKey.value = config.apiKey;
+    $settingInterval.value = config.interval;
+    $modal.classList.add('open');
+  });
+
+  document.getElementById('modalClose').addEventListener('click', function() {
+    $modal.classList.remove('open');
+  });
+
+  document.getElementById('settingsCancel').addEventListener('click', function() {
+    $modal.classList.remove('open');
+  });
+
+  document.getElementById('settingsSave').addEventListener('click', function() {
+    config.dzId = $settingDz.value;
+    config.apiKey = $settingApiKey.value;
+    config.interval = Math.max(5, parseInt($settingInterval.value, 10) || DEFAULT_INTERVAL);
+    saveConfig(config);
+    $modal.classList.remove('open');
+    startPolling();
+  });
+
+  $modal.addEventListener('click', function(e) {
+    if (e.target === $modal) $modal.classList.remove('open');
+  });
+
+  // --- Refresh ---
+  $refreshBtn.addEventListener('click', function() {
+    fetchData();
+  });
+
+  // --- Init ---
+  startPolling();
+})();
+</script>
+</body>
+</html>
