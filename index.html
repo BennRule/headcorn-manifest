@@ -2065,11 +2065,24 @@ body {
     if (e.key === 'Escape' && fullMapOpen) closeFullMap();
   });
 
+  // Resize on orientation change / window resize
+  window.addEventListener('resize', function() {
+    if (fullMapOpen) {
+      resizeFullMap();
+      renderFullMap();
+    }
+  });
+
   function resizeFullMap() {
     var canvas = document.getElementById('dzMapFull');
-    var rect = canvas.getBoundingClientRect();
-    canvas.width = rect.width * (window.devicePixelRatio || 1);
-    canvas.height = rect.height * (window.devicePixelRatio || 1);
+    // Force layout recalc by reading offsetHeight
+    var parent = canvas.parentElement;
+    var w = parent.clientWidth || window.innerWidth;
+    var h = (window.innerHeight || document.documentElement.clientHeight) - 50; // minus header
+    canvas.style.width = w + 'px';
+    canvas.style.height = h + 'px';
+    canvas.width = Math.round(w * (window.devicePixelRatio || 1));
+    canvas.height = Math.round(h * (window.devicePixelRatio || 1));
   }
 
   var fullMapTilesLoaded = {};
