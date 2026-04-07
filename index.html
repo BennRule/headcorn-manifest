@@ -931,44 +931,13 @@ body {
   .loads-area { padding: 12px; }
   .loads-grid { grid-template-columns: 1fr; }
 }
-
-/* DZ Tabs */
-.dz-tabs { background: var(--slate-800); display: flex; gap: 0; position: sticky; top: 56px; z-index: 99; border-bottom: 1px solid var(--slate-700); }
-.dz-tab { padding: 10px 24px; font-family: 'Barlow Condensed', sans-serif; font-weight: 600; font-size: 14px; text-transform: uppercase; letter-spacing: 1px; color: var(--slate-400); cursor: pointer; border: none; border-bottom: 3px solid transparent; background: none; transition: all 0.15s; }
-.dz-tab:hover { color: var(--slate-200); }
-.dz-tab.active { color: white; border-bottom-color: var(--blue-500); }
-.dz-content { display: none; }
-.dz-content.active { display: block; }
-
-/* Langar-specific */
-.langar-iframe-wrap { display: flex; flex-direction: column; height: calc(100vh - 160px); }
-.langar-iframe-notice { padding: 8px 24px; background: var(--amber-50); color: #92400e; font-size: 13px; font-family: 'Barlow', sans-serif; border-bottom: 1px solid #fcd34d; text-align: center; }
-.langar-iframe { flex: 1; border: none; width: 100%; min-height: 500px; }
-
-.jump-type { font-family: 'Barlow Condensed', sans-serif; font-weight: 600; font-size: 11px; padding: 2px 6px; border-radius: 3px; text-transform: uppercase; letter-spacing: 0.3px; }
-.jump-type-exp { background: var(--slate-100); color: var(--slate-700); }
-.jump-type-sta { background: #dbeafe; color: #1d4ed8; }
-.jump-type-coached { background: #ffedd5; color: #c2410c; }
-.jump-type-coach { background: #ffedd5; color: #c2410c; font-style: italic; }
-.jump-type-hop { background: var(--grey-100); color: var(--grey-400); }
-
-.lng-group { padding: 6px 0; border-bottom: 1px solid var(--slate-50); }
-.lng-group:last-child { border-bottom: none; }
-.lng-jumper { display: flex; align-items: center; gap: 8px; padding: 3px 0; }
-.lng-jumper-name { font-weight: 600; font-size: 14px; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.lng-jumper-name.coach { font-style: italic; font-weight: 500; color: var(--slate-500); }
-.lng-jumper-tags { display: flex; gap: 4px; flex-shrink: 0; }
-.lng-discipline { font-family: 'DM Mono', monospace; font-size: 11px; color: var(--slate-400); }
-.tag-turning { background: #dbeafe; color: #1d4ed8; }
-.tag-slot { background: var(--slate-100); color: var(--slate-600); font-family: 'DM Mono', monospace; font-size: 10px; }
-.lm-line { font-size: 12px; color: var(--slate-500); padding: 4px 16px 0; }
 </style>
 </head>
 <body>
 
 <!-- Header -->
 <header class="header">
-  <div class="header-title">Skydive Manifest</div>
+  <div class="header-title">Headcorn Manifest</div>
   <div class="header-clock" id="clock">--:--:--</div>
   <div class="header-status">
     <span class="status-dot" id="statusDot"></span>
@@ -981,15 +950,6 @@ body {
     <svg viewBox="0 0 24 24"><path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58a.49.49 0 00.12-.61l-1.92-3.32a.49.49 0 00-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54a.48.48 0 00-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96a.49.49 0 00-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.07.62-.07.94s.02.64.07.94l-2.03 1.58a.49.49 0 00-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6A3.6 3.6 0 1115.6 12 3.6 3.6 0 0112 15.6z"/></svg>
   </button>
 </header>
-
-<!-- DZ Tabs -->
-<div class="dz-tabs">
-  <button class="dz-tab active" data-dz="headcorn">Headcorn</button>
-  <button class="dz-tab" data-dz="langar">Langar</button>
-</div>
-
-<!-- Headcorn content -->
-<div id="dzHeadcorn" class="dz-content active">
 
 <!-- Metrics bar -->
 <div class="metrics-bar" id="metricsBar">
@@ -1061,43 +1021,6 @@ body {
     </div>
   </aside>
 </div>
-
-</div><!-- /dzHeadcorn -->
-
-<!-- Langar content -->
-<div id="dzLangar" class="dz-content">
-  <div class="metrics-bar">
-    <div class="metric">
-      <span class="metric-label">Airborne</span>
-      <span class="metric-value blue" id="lngAirborne">0</span>
-    </div>
-    <div class="metric">
-      <span class="metric-label">Building</span>
-      <span class="metric-value green" id="lngBuilding">0</span>
-    </div>
-    <div class="metric">
-      <span class="metric-label">On Load</span>
-      <span class="metric-value amber" id="lngOnLoad">0</span>
-    </div>
-    <div class="metric">
-      <span class="metric-label">Total Jumpers</span>
-      <span class="metric-value" id="lngJumpers">0</span>
-    </div>
-    <div class="metric">
-      <span class="metric-label">Slots Free</span>
-      <span class="metric-value amber" id="lngSlotsFree">0</span>
-    </div>
-  </div>
-  <div class="banner-container">
-    <div class="banner banner-error" id="langarError"></div>
-  </div>
-  <div class="loads-area" id="langarContent">
-    <div class="last-updated" id="langarLastUpdated"></div>
-    <div class="loads-grid" id="langarLoadsGrid">
-      <div class="empty-state">Loading Langar manifest&hellip;</div>
-    </div>
-  </div>
-</div><!-- /dzLangar -->
 
 <!-- Fullscreen map overlay -->
 <div class="fullscreen-map-overlay" id="fullscreenMap">
@@ -1223,17 +1146,6 @@ body {
   let aircraftLive = {};    // registration → { alt_baro, gs, baro_rate, lat, lon, on_ground, seen }
   let dzInfo = null;        // { lat, lon, name } from /dropzones
   let prevManifestStatuses = {};  // manifestId → previous status
-
-  // --- Langar (Burble) state ---
-  var LANGAR_API_URL = 'https://eu-displays.burblesoft.com/ajax_dzm2_frontend_jumpermanifestpublic';
-  var LANGAR_DISPLAY_URL = 'https://eu-displays.burblesoft.com/jmp';
-  var LANGAR_POLL_MS = 5000;
-  let langarLoads = [];
-  let langarCacheIndex = '';
-  let langarLastUpdate = null;
-  let langarPollTimer = null;
-  let langarCorsBlocked = false;
-  let activeDz = 'headcorn';
 
   // --- DOM refs ---
   const $clock = document.getElementById('clock');
@@ -1421,71 +1333,6 @@ body {
     renderAircraft();
     renderLoads(); // Re-render cards with live alt
     renderMap(); // Update aircraft positions on map
-  }
-
-  // --- Langar fetch pipeline ---
-  async function fetchLangarData() {
-    if (langarCorsBlocked) return;
-
-    try {
-      var proxy = config.proxy || '';
-      var body = 'action=getloads';
-      if (langarCacheIndex) body += '&cache_index=' + encodeURIComponent(langarCacheIndex);
-
-      var res = await fetch(proxy + encodeURIComponent(LANGAR_API_URL), {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-          'X-Requested-With': 'XMLHttpRequest'
-        },
-        body: body
-      });
-
-      if (!res.ok) throw new Error('Burble API returned ' + res.status);
-      var data = await res.json();
-
-      // Burble needs a session cookie from /jmp — if no session, success=false
-      if (!data.success) {
-        langarCorsBlocked = true;
-        showLangarIframe();
-        return;
-      }
-
-      langarCacheIndex = data.cache_index || '';
-
-      // If cached, skip re-render
-      if (data.cached === 1) return;
-
-      langarLoads = data.loads || [];
-      langarLastUpdate = new Date();
-
-      var $err = document.getElementById('langarError');
-      if ($err) $err.classList.remove('visible');
-
-      renderLangar();
-    } catch (err) {
-      // Any fetch failure → iframe fallback
-      langarCorsBlocked = true;
-      showLangarIframe();
-    }
-  }
-
-  function showLangarIframe() {
-    var container = document.getElementById('langarContent');
-    if (!container) return;
-    container.innerHTML = '<div style="padding:40px 24px;text-align:center;">' +
-      '<div style="font-family:Barlow Condensed,sans-serif;font-size:20px;font-weight:700;color:var(--slate-700);margin-bottom:12px;">SKYDIVE LANGAR — LIVE MANIFEST</div>' +
-      '<div style="color:var(--slate-500);font-size:14px;margin-bottom:24px;max-width:400px;margin-left:auto;margin-right:auto;">The Burble display requires a session cookie that can only be set by visiting their page directly. Click below to open the live Langar manifest.</div>' +
-      '<a href="' + LANGAR_DISPLAY_URL + '" target="_blank" rel="noopener" class="btn btn-primary" style="display:inline-block;text-decoration:none;font-size:16px;padding:12px 32px;">Open Langar Manifest &#8599;</a>' +
-      '<div style="color:var(--slate-400);font-size:12px;margin-top:16px;">Opens in a new tab &mdash; powered by Burble DZM</div>' +
-      '</div>';
-    if (langarPollTimer) { clearInterval(langarPollTimer); langarPollTimer = null; }
-  }
-
-  function startLangarPolling() {
-    if (langarPollTimer) clearInterval(langarPollTimer);
-    fetchLangarData();
-    langarPollTimer = setInterval(fetchLangarData, LANGAR_POLL_MS);
   }
 
   // --- Sort order ---
@@ -2122,138 +1969,6 @@ body {
     }
   }
 
-  // --- Langar render ---
-  var burbleStatusMap = {
-    'Building':  { css: 'candidate', label: 'Building' },
-    'OnLoad':    { css: 'trained', label: 'On Load' },
-    'Airborne':  { css: 'airborne', label: 'Airborne' },
-    'Landed':    { css: 'landedComplete', label: 'Landed' }
-  };
-
-  var burbleStatusOrder = { 'Airborne': 0, 'OnLoad': 1, 'Building': 2, 'Landed': 3 };
-
-  function jumpTypeClass(jump) {
-    if (!jump) return 'jump-type-exp';
-    var j = jump.toUpperCase();
-    if (j.indexOf('COACH') === 0) return 'jump-type-coach';
-    if (j === 'COACHED') return 'jump-type-coached';
-    if (j === 'STA') return 'jump-type-sta';
-    if (j.indexOf('HOP') > -1) return 'jump-type-hop';
-    return 'jump-type-exp';
-  }
-
-  function renderLangar() {
-    renderLangarMetrics();
-    renderLangarLoads();
-    var $lu = document.getElementById('langarLastUpdated');
-    if ($lu && langarLastUpdate) {
-      $lu.textContent = 'Last updated ' + langarLastUpdate.toLocaleTimeString('en-GB', { hour12: false });
-    }
-  }
-
-  function renderLangarMetrics() {
-    var airborne = 0, building = 0, onload = 0, jumpers = 0, slotsFree = 0;
-    var firstBuilding = null;
-    langarLoads.forEach(function(ld) {
-      if (ld.status === 'Airborne') airborne++;
-      if (ld.status === 'Building') { building++; if (!firstBuilding) firstBuilding = ld; }
-      if (ld.status === 'OnLoad') onload++;
-      jumpers += parseInt(ld.total_slots, 10) || 0;
-    });
-    if (firstBuilding) {
-      slotsFree = (parseInt(firstBuilding.max_slots, 10) || 0) - (parseInt(firstBuilding.total_slots, 10) || 0);
-    }
-    document.getElementById('lngAirborne').textContent = airborne;
-    document.getElementById('lngBuilding').textContent = building;
-    document.getElementById('lngOnLoad').textContent = onload;
-    document.getElementById('lngJumpers').textContent = jumpers;
-    document.getElementById('lngSlotsFree').textContent = slotsFree >= 0 ? slotsFree : 0;
-  }
-
-  function renderLangarLoads() {
-    if (langarCorsBlocked) return;
-    var grid = document.getElementById('langarLoadsGrid');
-    if (!grid) return;
-
-    if (langarLoads.length === 0) {
-      grid.innerHTML = '<div class="empty-state">No active loads at Langar</div>';
-      return;
-    }
-
-    // Sort: Airborne first, then OnLoad, Building, Landed
-    var sorted = langarLoads.slice().sort(function(a, b) {
-      return (burbleStatusOrder[a.status] || 9) - (burbleStatusOrder[b.status] || 9);
-    });
-
-    grid.innerHTML = sorted.map(function(ld) {
-      var sm = burbleStatusMap[ld.status] || { css: 'draft', label: ld.status };
-      var filled = parseInt(ld.total_slots, 10) || 0;
-      var maxSlots = parseInt(ld.max_slots, 10) || 0;
-      var slotsStr = filled + ' / ' + maxSlots;
-
-      // Time to takeoff
-      var timeHtml = '';
-      if (ld.is_no_time === '1') {
-        timeHtml = '<span style="font-family:DM Mono,monospace;font-size:12px;color:var(--slate-400);">No time</span>';
-      } else if (ld.time_left != null) {
-        timeHtml = '<span style="font-family:DM Mono,monospace;font-size:12px;color:var(--slate-500);">' + ld.time_left + ' min</span>';
-      }
-
-      // Turning indicator
-      var turningHtml = ld.is_turning === '1' ? '<span class="tag tag-turning">&#8635; Turning</span>' : '';
-
-      // Load master
-      var lmHtml = ld.lm ? '<div class="lm-line">LM: ' + esc(ld.lm) + '</div>' : '';
-
-      // Groups of jumpers
-      var groupsHtml = '';
-      if (ld.groups && ld.groups.length > 0) {
-        ld.groups.forEach(function(group) {
-          if (!group || group.length === 0) return;
-          groupsHtml += '<div class="lng-group">';
-          group.forEach(function(j) {
-            var isCoach = j.transaction_type_id === '3' || (j.jump && j.jump.toLowerCase() === 'coach');
-            var nameClass = isCoach ? 'lng-jumper-name coach' : 'lng-jumper-name';
-            var tags = '';
-
-            // Jump type badge
-            tags += '<span class="jump-type ' + jumpTypeClass(j.jump) + '">' + esc(j.jump || 'EXP') + '</span>';
-
-            // Discipline
-            if (j.formation_type_name) {
-              tags += '<span class="lng-discipline">' + esc(j.formation_type_name) + '</span>';
-            }
-
-            // Gear slot
-            if (j.group_number) {
-              tags += '<span class="tag tag-slot">' + esc(j.group_number) + '</span>';
-            }
-
-            groupsHtml += '<div class="lng-jumper">' +
-              '<span class="' + nameClass + '">' + esc(j.name) + '</span>' +
-              '<div class="lng-jumper-tags">' + tags + '</div>' +
-            '</div>';
-          });
-          groupsHtml += '</div>';
-        });
-      }
-
-      return '<div class="load-card" data-status="' + sm.css + '">' +
-        '<div class="card-header">' +
-          '<span class="lift-number">' + esc(ld.name || 'Load ' + ld.id) + '</span>' +
-          '<span class="status-badge ' + sm.css + '">' + sm.label + '</span>' +
-          turningHtml +
-          '<div class="card-meta">' +
-            timeHtml +
-            '<span class="jumper-count"><svg viewBox="0 0 24 24"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/></svg> ' + slotsStr + '</span>' +
-          '</div>' +
-        '</div>' +
-        lmHtml +
-        (groupsHtml ? '<div class="card-body">' + groupsHtml + '</div>' : '') +
-      '</div>';
-    }).join('');
-  }
-
   // --- Polling ---
   function startPolling() {
     if (pollTimer) clearInterval(pollTimer);
@@ -2306,18 +2021,6 @@ body {
 
   $modal.addEventListener('click', function(e) {
     if (e.target === $modal) $modal.classList.remove('open');
-  });
-
-  // --- DZ Tab switching ---
-  document.querySelectorAll('.dz-tab').forEach(function(tab) {
-    tab.addEventListener('click', function() {
-      activeDz = this.getAttribute('data-dz');
-      document.querySelectorAll('.dz-tab').forEach(function(t) { t.classList.remove('active'); });
-      this.classList.add('active');
-      document.querySelectorAll('.dz-content').forEach(function(c) { c.classList.remove('active'); });
-      var target = activeDz === 'headcorn' ? 'dzHeadcorn' : 'dzLangar';
-      document.getElementById(target).classList.add('active');
-    });
   });
 
   // --- Filter buttons ---
@@ -2502,7 +2205,6 @@ body {
 
   // --- Init ---
   startPolling();
-  startLangarPolling();
 })();
 </script>
 </body>
