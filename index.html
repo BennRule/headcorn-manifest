@@ -1444,7 +1444,12 @@ body {
       if (!res.ok) throw new Error('Burble API returned ' + res.status);
       var data = await res.json();
 
-      if (!data.success) throw new Error('Burble API error');
+      // Burble needs a session cookie from /jmp — if no session, success=false
+      if (!data.success) {
+        langarCorsBlocked = true;
+        showLangarIframe();
+        return;
+      }
 
       langarCacheIndex = data.cache_index || '';
 
@@ -1459,14 +1464,9 @@ body {
 
       renderLangar();
     } catch (err) {
-      var msg = err.message || 'Unknown error';
-      if (msg.includes('Failed to fetch') || msg.includes('TypeError') || msg.includes('NetworkError')) {
-        langarCorsBlocked = true;
-        showLangarIframe();
-        return;
-      }
-      var $err = document.getElementById('langarError');
-      if ($err) { $err.textContent = 'Langar: ' + msg; $err.classList.add('visible'); }
+      // Any fetch failure → iframe fallback
+      langarCorsBlocked = true;
+      showLangarIframe();
     }
   }
 
