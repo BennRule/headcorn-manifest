@@ -1352,7 +1352,10 @@ body {
           var isGround = ac.alt_baro === 'ground' || (altNum !== null && altNum < 200 && (ac.gs || 0) < 30);
           // Skip stale data (not heard for over 60 seconds)
           if (ac.seen > 60) return;
-          newLive[reg] = {
+          // Detect proxy-cached stale data: if alt, speed, and position are
+          // identical to the previous response, increment a stale counter.
+          var prev = aircraftLive[reg];
+          var entry = {
             alt_baro: ac.alt_baro,
             gs: ac.gs,
             baro_rate: ac.baro_rate,
@@ -1361,8 +1364,15 @@ body {
             on_ground: isGround,
             seen: ac.seen,
             flight: (ac.flight || '').trim(),
-            track: ac.track
+            track: ac.track,
+            _staleCount: 0
           };
+          if (prev && prev.alt_baro === ac.alt_baro && prev.gs === ac.gs && prev.lat === ac.lat && prev.lon === ac.lon) {
+            entry._staleCount = (prev._staleCount || 0) + 1;
+          }
+          // If data has been identical for 6+ consecutive polls (~30s), treat as stale
+          if (entry._staleCount >= 6) return;
+          newLive[reg] = entry;
         }
       }).catch(function() {
         // Non-fatal — skip this registration
