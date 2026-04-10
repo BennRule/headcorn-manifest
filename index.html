@@ -1331,18 +1331,17 @@ body {
     // Fetch all in parallel
     var fetches = regs.map(function(reg) {
       var url = ADSB_BASE + encodeURIComponent(reg);
-      var cacheBust = '_t=' + Date.now();
-      var directUrl = url + (url.includes('?') ? '&' : '?') + cacheBust;
-      var proxyUrl = proxy + encodeURIComponent(url) + '&' + cacheBust;
+      var proxyUrl = proxy + encodeURIComponent(url);
+      var fetchOpts = { cache: 'no-store' };
       // Try direct with short timeout, fall back to proxy
       var controller = new AbortController();
       var timer = setTimeout(function() { controller.abort(); }, 2000);
-      return fetch(directUrl, { signal: controller.signal }).then(function(res) {
+      return fetch(url, { signal: controller.signal, cache: 'no-store' }).then(function(res) {
         clearTimeout(timer);
         return res;
       }).catch(function() {
         clearTimeout(timer);
-        return fetch(proxyUrl);
+        return fetch(proxyUrl, fetchOpts);
       }).then(function(res) {
         if (!res.ok) return null;
         return res.json();
