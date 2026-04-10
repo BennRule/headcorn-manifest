@@ -1814,9 +1814,9 @@ body {
       var planeReg = planeInfo ? planeInfo.registration : null;
       var planeRegHtml = planeReg ? '<span class="card-plane-reg">' + esc(planeReg) + '</span>' : '';
 
-      // Live altitude if plane is airborne
+      // Live altitude — only show if this manifest is airborne
       var liveAltHtml = '';
-      if (planeReg && aircraftLive[planeReg]) {
+      if (m.manifestStatus === 'airborne' && planeReg && aircraftLive[planeReg]) {
         var acStatus = getAircraftStatus(planeReg);
         if (acStatus.alt !== null) {
           liveAltHtml = '<span class="card-live-alt">' + acStatus.icon + ' ' + Math.round(acStatus.alt).toLocaleString() + ' ft</span>';
