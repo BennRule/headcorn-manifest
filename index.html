@@ -996,7 +996,7 @@ body {
 
 <!-- Aircraft bar -->
 <div class="aircraft-bar" id="aircraftBar">
-  <span class="aircraft-bar-label">Fleet</span>
+  <span class="aircraft-bar-label">Aircraft</span>
 </div>
 
 <!-- Main content -->
@@ -1137,6 +1137,8 @@ body {
 
   let config = loadConfig();
   let pollTimer = null;
+  let aircraftPollTimer = null; // independent fast-poll for flight data when airborne
+  var AIRCRAFT_POLL_INTERVAL = 5000; // 5 seconds when in flight
   let manifests = [];
   let weatherHold = false;
   let wallboardMsg = null;
@@ -1217,15 +1219,16 @@ body {
       if (!weatherRes.ok) throw new Error('Weather API returned ' + weatherRes.status);
 
       const manifestData = await manifestRes.json();
+      if (manifestData.message) throw new Error('Manifest API: ' + manifestData.message);
       const weatherData = await weatherRes.json();
 
-      // Build planes lookup
+      // Build full planes lookup (all DZs)
+      var allPlanesMap = {};
       if (planesRes.ok) {
         var planesData = await planesRes.json();
-        planesMap = {};
         (planesData.planeCollection || []).forEach(function(p) {
           if (!p.isArchived) {
-            planesMap[p.id] = {
+            allPlanesMap[p.id] = {
               registration: p.registration,
               planeName: p.planeName,
               maxWeightInLbs: p.maxLoadWeightInLbs,
@@ -1251,6 +1254,14 @@ body {
         return m.dropzoneId === config.dzId && m.manifestDate === today;
       });
 
+      // Filter planesMap to only aircraft used on this DZ's manifests
+      planesMap = {};
+      manifests.forEach(function(m) {
+        if (m.planeId && allPlanesMap[m.planeId]) {
+          planesMap[m.planeId] = allPlanesMap[m.planeId];
+        }
+      });
+
       weatherHold = weatherData.isOnWeatherHold || false;
       wallboardMsg = weatherData.wallboardMessage || null;
 
@@ -1264,6 +1275,7 @@ body {
 
       // Fire aircraft tracking (non-blocking)
       fetchAircraftTracking();
+      updateAircraftPollTimer();
     } catch (err) {
       setStatus('error', 'Error');
       var msg = err.message || 'Unknown error';
@@ -1278,6 +1290,23 @@ body {
 
   // --- Aircraft tracking via adsb.lol ---
   var ADSB_BASE = 'https://api.adsb.lol/v2/reg/';
+
+  function hasAirborneManifest() {
+    return manifests.some(function(m) { return m.manifestStatus === 'airborne'; });
+  }
+
+  function updateAircraftPollTimer() {
+    if (hasAirborneManifest()) {
+      if (!aircraftPollTimer) {
+        aircraftPollTimer = setInterval(fetchAircraftTracking, AIRCRAFT_POLL_INTERVAL);
+      }
+    } else {
+      if (aircraftPollTimer) {
+        clearInterval(aircraftPollTimer);
+        aircraftPollTimer = null;
+      }
+    }
+  }
 
   async function fetchAircraftTracking() {
     // Get unique registrations from planes map
@@ -1302,9 +1331,18 @@ body {
     // Fetch all in parallel
     var fetches = regs.map(function(reg) {
       var url = ADSB_BASE + encodeURIComponent(reg);
-      // Try direct first (adsb.lol supports CORS), fall back to proxy
-      return fetch(url).catch(function() {
-        return fetch(proxy + encodeURIComponent(url));
+      var cacheBust = '_t=' + Date.now();
+      var directUrl = url + (url.includes('?') ? '&' : '?') + cacheBust;
+      var proxyUrl = proxy + encodeURIComponent(url) + '&' + cacheBust;
+      // Try direct with short timeout, fall back to proxy
+      var controller = new AbortController();
+      var timer = setTimeout(function() { controller.abort(); }, 2000);
+      return fetch(directUrl, { signal: controller.signal }).then(function(res) {
+        clearTimeout(timer);
+        return res;
+      }).catch(function() {
+        clearTimeout(timer);
+        return fetch(proxyUrl);
       }).then(function(res) {
         if (!res.ok) return null;
         return res.json();
@@ -1518,11 +1556,11 @@ body {
 
     var regs = Object.keys(todayRegs);
     if (regs.length === 0 && Object.keys(planesMap).length === 0) {
-      $aircraftBar.innerHTML = '<span class="aircraft-bar-label">Fleet</span><span style="color:var(--slate-500);font-size:12px;">No aircraft data</span>';
+      $aircraftBar.innerHTML = '<span class="aircraft-bar-label">Aircraft</span><span style="color:var(--slate-500);font-size:12px;">No aircraft data</span>';
       return;
     }
 
-    // If no specific today regs, show all fleet
+    // If no specific today regs, show all aircraft
     if (regs.length === 0) {
       var seen = {};
       Object.values(planesMap).forEach(function(p) {
@@ -1534,7 +1572,7 @@ body {
       regs = Object.keys(todayRegs);
     }
 
-    var html = '<span class="aircraft-bar-label">Fleet</span>';
+    var html = '<span class="aircraft-bar-label">Aircraft</span>';
     regs.forEach(function(reg) {
       var status = getAircraftStatus(reg);
       var chipClass = 'aircraft-chip ' + status.state;
