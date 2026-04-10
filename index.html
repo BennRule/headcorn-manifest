@@ -1348,13 +1348,17 @@ body {
       }).then(function(data) {
         if (data && data.ac && data.ac.length > 0) {
           var ac = data.ac[0];
+          var altNum = typeof ac.alt_baro === 'number' ? ac.alt_baro : null;
+          var isGround = ac.alt_baro === 'ground' || (altNum !== null && altNum < 200 && (ac.gs || 0) < 30);
+          // Skip stale data (not heard for over 60 seconds)
+          if (ac.seen > 60) return;
           newLive[reg] = {
             alt_baro: ac.alt_baro,
             gs: ac.gs,
             baro_rate: ac.baro_rate,
             lat: ac.lat,
             lon: ac.lon,
-            on_ground: ac.alt_baro === 'ground',
+            on_ground: isGround,
             seen: ac.seen,
             flight: (ac.flight || '').trim(),
             track: ac.track
