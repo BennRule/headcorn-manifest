@@ -1228,11 +1228,14 @@ body {
   // with a parseable JSON body. A non-2xx, a network error, or a non-JSON body
   // (e.g. a proxy challenge page served with status 200) falls through to the
   // next proxy. Throws if every proxy is exhausted.
+  var PROXY_TIMEOUT_MS = 10000; // abort a stalled proxy so we fall through to the next
   async function fetchJsonViaProxies(apiUrl, proxies) {
     var lastErr = null;
     for (var i = 0; i < proxies.length; i++) {
+      var ctrl = new AbortController();
+      var timer = setTimeout(function() { ctrl.abort(); }, PROXY_TIMEOUT_MS);
       try {
-        var res = await fetch(proxies[i] + encodeURIComponent(apiUrl), { headers: headers() });
+        var res = await fetch(proxies[i] + encodeURIComponent(apiUrl), { headers: headers(), signal: ctrl.signal });
         if (!res.ok) { lastErr = new Error('HTTP ' + res.status); continue; }
         var text = await res.text();
         try {
@@ -1241,7 +1244,9 @@ body {
           lastErr = new Error('non-JSON response (proxy challenge page?)');
         }
       } catch (e) {
-        lastErr = e; // network / CORS failure
+        lastErr = (e && e.name === 'AbortError') ? new Error('proxy timed out') : e; // network / CORS / timeout
+      } finally {
+        clearTimeout(timer);
       }
     }
     throw lastErr || new Error('no proxies configured');
@@ -1256,7 +1261,7 @@ body {
     // is silently ignored and returns an unrelated default set (see the live
     // wallboard's own request). limit/archived_status match that request too.
     var manifestUrl = BASE_URL + '/manifests?dropzone_id_eq=' + config.dzId +
-      '&manifest_date_eq=' + todayStr() + '&limit=100&archived_status=active';
+      '&manifest_date_eq=' + todayStr() + '&limit=50&archived_status=active';
     var weatherUrl = BASE_URL + '/calendar/weather-holds?dropzone_id=' + config.dzId + '&date=' + todayStr();
     var planesUrl = BASE_URL + '/planes?dropzone_id=' + config.dzId;
     var dzUrl = BASE_URL + '/dropzones';
