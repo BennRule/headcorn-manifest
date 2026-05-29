@@ -1106,8 +1106,21 @@ body {
   const DEFAULT_DZ = 'dz_0kFFGQXAkk';
   const DEFAULT_KEY = 'bWFjY182ODZiZTVmODhjNjQ0NTYxOmFwaWtleV8zNGI3ZDY0YWVlZmJhODFjMzkwYTMxMjYzMTNhNzQyMg==';
   const DEFAULT_INTERVAL = 30;
-  const DEFAULT_PROXY = 'https://corsproxy.io/?url=';
+  // Empty by default → fall back to the built-in proxy chain below. A value set
+  // in Settings (e.g. your Cloudflare Worker) takes priority over the chain.
+  const DEFAULT_PROXY = '';
   const BASE_URL = 'https://dz.goskydive.com';
+
+  // Paste your deployed Cloudflare Worker URL here (see worker.js), or leave it
+  // blank and set it in Settings instead. Must end with the ?url= param.
+  const WORKER_PROXY = '';
+  // Ordered fallback chain tried after the user's Settings override. corsproxy.io
+  // is last because its free tier has become unreliable (403s, 200 challenge pages).
+  const FALLBACK_PROXIES = [
+    WORKER_PROXY,
+    'https://api.allorigins.win/raw?url=',
+    'https://corsproxy.io/?url='
+  ];
 
   function loadConfig() {
     return {
@@ -1143,6 +1156,7 @@ body {
   let weatherHold = false;
   let wallboardMsg = null;
   let lastUpdateTime = null;
+  let fetchFailed = false;   // true when every proxy in the chain failed to deliver the manifest
   let viewFilter = 'active'; // 'active' or 'all'
   let planesMap = {};       // planeId → { registration, planeName, maxWeightInLbs, capacity }
   let aircraftLive = {};    // registration → { alt_baro, gs, baro_rate, lat, lon, on_ground, seen }
@@ -1198,34 +1212,80 @@ body {
     return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
   }
 
+  // Ordered list of proxies to try: the Settings override first (if set), then
+  // the built-in fallback chain. Blanks dropped, duplicates removed.
+  function proxyChain() {
+    var seen = {};
+    return [config.proxy].concat(FALLBACK_PROXIES).filter(function(p) {
+      p = (p || '').trim();
+      if (!p || seen[p]) return false;
+      seen[p] = true;
+      return true;
+    });
+  }
+
+  // Fetch one API url, walking the proxy chain until one returns a 2xx response
+  // with a parseable JSON body. A non-2xx, a network error, or a non-JSON body
+  // (e.g. a proxy challenge page served with status 200) falls through to the
+  // next proxy. Throws if every proxy is exhausted.
+  async function fetchJsonViaProxies(apiUrl, proxies) {
+    var lastErr = null;
+    for (var i = 0; i < proxies.length; i++) {
+      try {
+        var res = await fetch(proxies[i] + encodeURIComponent(apiUrl), { headers: headers() });
+        if (!res.ok) { lastErr = new Error('HTTP ' + res.status); continue; }
+        var text = await res.text();
+        try {
+          return JSON.parse(text);
+        } catch (e) {
+          lastErr = new Error('non-JSON response (proxy challenge page?)');
+        }
+      } catch (e) {
+        lastErr = e; // network / CORS failure
+      }
+    }
+    throw lastErr || new Error('no proxies configured');
+  }
+
   async function fetchData() {
     setStatus('loading', 'Updating');
     $errorBanner.classList.remove('visible');
 
+    var proxies = proxyChain();
+    var manifestUrl = BASE_URL + '/manifests?dropzone_id=' + config.dzId;
+    var weatherUrl = BASE_URL + '/calendar/weather-holds?dropzone_id=' + config.dzId + '&date=' + todayStr();
+    var planesUrl = BASE_URL + '/planes?dropzone_id=' + config.dzId;
+    var dzUrl = BASE_URL + '/dropzones';
+
+    // The manifest call is the critical one — if no proxy in the chain can
+    // deliver it, we're genuinely offline (distinct from a quiet dropzone).
+    var manifestData;
     try {
-      var proxy = config.proxy || '';
-      var manifestUrl = BASE_URL + '/manifests?dropzone_id=' + config.dzId;
-      var weatherUrl = BASE_URL + '/calendar/weather-holds?dropzone_id=' + config.dzId + '&date=' + todayStr();
-      var planesUrl = BASE_URL + '/planes?dropzone_id=' + config.dzId;
-      var dzUrl = BASE_URL + '/dropzones';
-      const [manifestRes, weatherRes, planesRes, dzRes] = await Promise.all([
-        fetch(proxy + encodeURIComponent(manifestUrl), { headers: headers() }),
-        fetch(proxy + encodeURIComponent(weatherUrl), { headers: headers() }),
-        fetch(proxy + encodeURIComponent(planesUrl), { headers: headers() }),
-        !dzInfo ? fetch(proxy + encodeURIComponent(dzUrl), { headers: headers() }).catch(function() { return null; }) : Promise.resolve(null)
-      ]);
+      manifestData = await fetchJsonViaProxies(manifestUrl, proxies);
+    } catch (err) {
+      fetchFailed = true;
+      setStatus('error', 'Offline');
+      $errorBanner.textContent = 'Connection failed — tried ' + proxies.length + ' prox' +
+        (proxies.length === 1 ? 'y' : 'ies') + ' without success (' + (err.message || 'unknown error') +
+        '). Check the proxy in Settings.';
+      $errorBanner.classList.add('visible');
+      render();
+      return;
+    }
 
-      if (!manifestRes.ok) throw new Error('Manifest API returned ' + manifestRes.status);
-      if (!weatherRes.ok) throw new Error('Weather API returned ' + weatherRes.status);
-
-      const manifestData = await manifestRes.json();
+    try {
       if (manifestData.message) throw new Error('Manifest API: ' + manifestData.message);
-      const weatherData = await weatherRes.json();
+
+      // Secondary calls — tolerant: a failure here shouldn't blank the board.
+      const [weatherData, planesData, dzData] = await Promise.all([
+        fetchJsonViaProxies(weatherUrl, proxies).catch(function() { return {}; }),
+        fetchJsonViaProxies(planesUrl, proxies).catch(function() { return null; }),
+        !dzInfo ? fetchJsonViaProxies(dzUrl, proxies).catch(function() { return null; }) : Promise.resolve(null)
+      ]);
 
       // Build full planes lookup (all DZs)
       var allPlanesMap = {};
-      if (planesRes.ok) {
-        var planesData = await planesRes.json();
+      if (planesData) {
         (planesData.planeCollection || []).forEach(function(p) {
           if (!p.isArchived) {
             allPlanesMap[p.id] = {
@@ -1239,9 +1299,8 @@ body {
       }
 
       // Build DZ info (once)
-      if (!dzInfo && dzRes && dzRes.ok) {
+      if (!dzInfo && dzData) {
         try {
-          var dzData = await dzRes.json();
           var myDz = (dzData.dropzoneCollection || []).find(function(d) { return d.id === config.dzId; });
           if (myDz) {
             dzInfo = { lat: myDz.gpsLatitude, lon: myDz.gpsLongitude, name: myDz.dropzoneName };
@@ -1265,6 +1324,7 @@ body {
       weatherHold = weatherData.isOnWeatherHold || false;
       wallboardMsg = weatherData.wallboardMessage || null;
 
+      fetchFailed = false;
       lastUpdateTime = new Date();
       setStatus('ok', 'Live');
 
@@ -1277,12 +1337,10 @@ body {
       fetchAircraftTracking();
       updateAircraftPollTimer();
     } catch (err) {
+      // Connected, but the API rejected us (e.g. bad key) — not a proxy failure.
+      fetchFailed = false;
       setStatus('error', 'Error');
-      var msg = err.message || 'Unknown error';
-      if (msg.toLowerCase().includes('failed to fetch') || msg.toLowerCase().includes('networkerror')) {
-        msg += ' — If CORS is blocking the request, try opening the official GoSkydive wallboard first to establish a session, or use a CORS proxy.';
-      }
-      $errorBanner.textContent = msg;
+      $errorBanner.textContent = err.message || 'Unknown error';
       $errorBanner.classList.add('visible');
       if (lastUpdateTime) render();
     }
@@ -1632,8 +1690,19 @@ body {
       });
     }
     if (sorted.length === 0) {
-      var msg = viewFilter === 'active' ? 'No active loads — switch to "All Loads" to see landed lifts' :
-                viewFilter === 'sports' ? 'No loads with sport jumpers today' : 'No loads for today';
+      var msg;
+      if (fetchFailed) {
+        // All proxies exhausted — don't pretend the dropzone is just quiet.
+        msg = 'Connection failed — couldn\'t reach the manifest service. Check the proxy in Settings.';
+      } else if (manifests.length === 0) {
+        // Connected, but nothing on the manifest at all today.
+        msg = 'No loads on the manifest today';
+      } else if (viewFilter === 'active') {
+        // Connected with loads, just none currently active.
+        msg = 'No active loads — switch to "All Loads" to see landed lifts';
+      } else {
+        msg = viewFilter === 'sports' ? 'No loads with sport jumpers today' : 'No loads for today';
+      }
       $loadsGrid.innerHTML = '<div class="empty-state">' + msg + '</div>';
       return;
     }
