@@ -1252,7 +1252,11 @@ body {
     $errorBanner.classList.remove('visible');
 
     var proxies = proxyChain();
-    var manifestUrl = BASE_URL + '/manifests?dropzone_id=' + config.dzId;
+    // The API filters by dropzone_id_eq / manifest_date_eq — a plain dropzone_id
+    // is silently ignored and returns an unrelated default set (see the live
+    // wallboard's own request). limit/archived_status match that request too.
+    var manifestUrl = BASE_URL + '/manifests?dropzone_id_eq=' + config.dzId +
+      '&manifest_date_eq=' + todayStr() + '&limit=100&archived_status=active';
     var weatherUrl = BASE_URL + '/calendar/weather-holds?dropzone_id=' + config.dzId + '&date=' + todayStr();
     var planesUrl = BASE_URL + '/planes?dropzone_id=' + config.dzId;
     var dzUrl = BASE_URL + '/dropzones';
