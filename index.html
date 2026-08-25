@@ -362,6 +362,10 @@ body {
   font-weight: 500;
 }
 
+a.card-plane-reg, a.ac-reg { text-decoration: none; cursor: pointer; }
+a.ac-reg { color: inherit; }
+a.card-plane-reg:hover, a.ac-reg:hover { text-decoration: underline; }
+
 .card-live-alt {
   font-family: 'DM Mono', monospace;
   font-size: 11px;
@@ -1887,7 +1891,7 @@ body {
       var chipClass = 'aircraft-chip ' + status.state;
 
       html += '<div class="' + chipClass + '">';
-      html += '<span class="ac-reg">' + esc(reg) + '</span>';
+      html += '<a class="ac-reg" href="https://uk.flightaware.com/live/flight/' + encodeURIComponent(reg) + '" target="_blank" rel="noopener" title="Flight history on FlightAware">' + esc(reg) + '</a>';
       html += '<span class="ac-status-icon">' + status.icon + '</span>';
       html += '<span class="ac-label">' + status.label + '</span>';
 
@@ -2212,7 +2216,7 @@ body {
       // Plane info for this load
       var planeInfo = m.planeId && planesMap[m.planeId] ? planesMap[m.planeId] : null;
       var planeReg = planeInfo ? planeInfo.registration : null;
-      var planeRegHtml = planeReg ? '<span class="card-plane-reg">' + esc(planeReg) + '</span>' : '';
+      var planeRegHtml = planeReg ? '<a class="card-plane-reg" href="https://uk.flightaware.com/live/flight/' + encodeURIComponent(planeReg) + '" target="_blank" rel="noopener" title="Flight history on FlightAware">' + esc(planeReg) + '</a>' : '';
 
       // Live altitude — only show if this manifest is airborne
       var liveAltHtml = '';
