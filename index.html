@@ -727,6 +727,60 @@ body {
   color: #166534;
 }
 
+/* AFF section styling */
+.aff-section {
+  background: #eef2ff;
+  border-left: 3px solid #6366f1;
+  margin: 0 -16px;
+  padding: 8px 16px;
+}
+
+.aff-section .section-label { color: #3730a3; }
+
+.aff-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 5px 0;
+  border-bottom: 1px solid rgba(55,48,163,0.08);
+}
+
+.aff-row:last-child { border-bottom: none; }
+
+.aff-info { flex: 1; min-width: 0; }
+
+.aff-name { font-weight: 700; font-size: 15px; color: var(--slate-800); }
+
+.aff-crew {
+  font-size: 12px;
+  color: var(--slate-500);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.aff-detail {
+  font-size: 12px;
+  color: var(--slate-500);
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 1px;
+}
+
+.aff-detail span { white-space: nowrap; }
+
+.aff-tags {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.tag-aff { background: #e0e7ff; color: #3730a3; }
+
 /* Sidebar */
 .sidebar {
   width: 300px;
@@ -1687,6 +1741,13 @@ body {
     return hasSportCol || hasSportCust;
   }
 
+  // Turn an AFF skydiveType code into a readable level tag, e.g. "aff2On1" → "AFF 2-on-1".
+  function fmtAffType(t) {
+    if (!t) return 'AFF';
+    var s = String(t).replace(/^aff/i, '').replace(/On/g, '-on-').replace(/([a-z])([A-Z0-9])/g, '$1 $2');
+    return ('AFF ' + s).replace(/\s+/g, ' ').trim();
+  }
+
   function renderLoads() {
     var sorted = sortManifests(manifests);
     if (viewFilter === 'active') {
@@ -1882,10 +1943,53 @@ body {
         sportsHtml += '</div>'; // close sports-section
       }
 
-      // In sports-only mode, hide tandems
-      if (viewFilter === 'sports') tandemHtml = '';
+      // AFF — students (customerRole 'aff') with their instructors (affInstructor / aff2ndInstructor)
+      var affCustomers = customers.filter(function(c) { return c.customerRole === 'aff'; });
+      var affHtml = '';
+      if (affCustomers.length > 0) {
+        affHtml = '<div class="aff-section"><div class="section-label">AFF (' + affCustomers.length + ')</div>';
+        affCustomers.forEach(function(cust) {
+          var setColleagues = findBySetEid(colleagues, cust.setEid);
+          var instructor = setColleagues.find(function(c) { return c.colleagueRole === 'affInstructor'; });
+          var secondInstructor = setColleagues.find(function(c) { return c.colleagueRole === 'aff2ndInstructor'; });
+          var custSet = sets.find(function(s) { return s.eid === cust.setEid; });
+          var custAlt = custSet ? fmtAlt(custSet.jumpAltitudeInFt) : '';
+          var skydiveResult = custSet ? custSet.skydiveResult : null;
 
-      var hasBody = tandemHtml || sportsHtml;
+          var crewParts = [];
+          if (instructor) crewParts.push(esc(instructor.fullName));
+          if (secondInstructor) crewParts.push(esc(secondInstructor.fullName));
+
+          var details = [];
+          if (cust.weightInLbs) details.push('<span>' + cust.weightInLbs + ' lbs</span>');
+          if (cust.arrivalTime) details.push('<span class="arrival-time">Arr ' + cust.arrivalTime.substring(0, 5) + '</span>');
+
+          var tags = '';
+          if (custSet && custSet.skydiveType) tags += '<span class="tag tag-aff">' + esc(fmtAffType(custSet.skydiveType)) + '</span>';
+          if (custAlt) tags += '<span class="tag tag-alt">' + custAlt + '</span>';
+          if (skydiveResult === 'declined') tags += '<span class="tag tag-declined">Declined</span>';
+          if (custSet && custSet.specialWarning) tags += '<span class="tag tag-note" title="' + esc(custSet.specialWarning) + '">' + esc(custSet.specialWarning) + '</span>';
+          if (cust.skydiveConditions) tags += '<span class="tag tag-condition" title="' + esc(cust.skydiveConditions) + '">' + esc(cust.skydiveConditions) + '</span>';
+          if (cust.evaluationConditions) tags += '<span class="tag tag-note" title="' + esc(cust.evaluationConditions) + '">' + esc(cust.evaluationConditions) + '</span>';
+          if (cust.prominantNote) tags += '<span class="tag tag-note" title="' + esc(cust.prominantNote) + '">' + esc(cust.prominantNote) + '</span>';
+          if (!cust.fitSignatureFileLocation) tags += '<span class="tag tag-nosig">No sig</span>';
+
+          affHtml += '<div class="aff-row">' +
+            '<div class="aff-info">' +
+              '<div class="aff-name">' + esc(cust.fullName) + '</div>' +
+              (crewParts.length ? '<div class="aff-crew">' + crewParts.join(' &bull; ') + '</div>' : '') +
+              (details.length ? '<div class="aff-detail">' + details.join('') + '</div>' : '') +
+            '</div>' +
+            '<div class="aff-tags">' + tags + '</div>' +
+          '</div>';
+        });
+        affHtml += '</div>'; // close aff-section
+      }
+
+      // In sports-only mode, hide tandems and AFF
+      if (viewFilter === 'sports') { tandemHtml = ''; affHtml = ''; }
+
+      var hasBody = tandemHtml || sportsHtml || affHtml;
 
       // Plane info for this load
       var planeInfo = m.planeId && planesMap[m.planeId] ? planesMap[m.planeId] : null;
@@ -1925,7 +2029,7 @@ body {
           '</div>' +
         '</div>' +
         weightBarHtml +
-        (hasBody ? '<div class="card-body">' + sportsHtml + tandemHtml + '</div>' : '') +
+        (hasBody ? '<div class="card-body">' + sportsHtml + affHtml + tandemHtml + '</div>' : '') +
       '</div>';
     }).join('');
   }
