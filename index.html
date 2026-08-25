@@ -781,6 +781,66 @@ body {
 
 .tag-aff { background: #e0e7ff; color: #3730a3; }
 
+/* Seats badge, crew line, approvals, cancelled loads, safety flags */
+.seats-badge {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 600;
+  font-size: 12px;
+  background: var(--slate-100);
+  color: var(--slate-600);
+  padding: 2px 6px;
+  border-radius: 3px;
+}
+.seats-badge.full { background: var(--amber-100); color: #92400e; }
+
+.card-crew {
+  padding: 6px 16px;
+  font-size: 13px;
+  color: var(--slate-600);
+  border-bottom: 1px solid var(--slate-100);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+.crew-role {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 600;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--slate-400);
+  margin-right: 2px;
+}
+.crew-sep { color: var(--slate-300); }
+
+.card-approvals {
+  margin: 10px 16px 0;
+  padding: 8px 10px;
+  background: var(--amber-100);
+  border-radius: 6px;
+  border-left: 3px solid var(--amber-500);
+}
+.card-approvals-title {
+  display: block;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 600;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #92400e;
+  margin-bottom: 3px;
+}
+.approval-line { font-size: 12px; color: #92400e; line-height: 1.35; }
+
+.load-card.cancelled { opacity: 0.55; }
+.load-card.cancelled .lift-number { text-decoration: line-through; }
+.status-badge.cancelled { background: var(--red-100); color: #991b1b; }
+
+.tag-coach { background: #ecfeff; color: #0e7490; }
+.tag-med { background: var(--red-100); color: #991b1b; }
+.tag-own { background: var(--slate-100); color: var(--slate-600); }
+
 /* Sidebar */
 .sidebar {
   width: 300px;
@@ -1215,6 +1275,7 @@ body {
   let planesMap = {};       // planeId → { registration, planeName, maxWeightInLbs, capacity }
   let aircraftLive = {};    // registration → { alt_baro, gs, baro_rate, lat, lon, on_ground, seen }
   let dzInfo = null;        // { lat, lon, name } from /dropzones
+  let colleagueNames = {};  // colleagueId → fullName (pilots / jump masters), from /colleagues:headers
   let prevManifestStatuses = {};  // manifestId → previous status
 
   // --- DOM refs ---
@@ -1339,12 +1400,35 @@ body {
     try {
       if (manifestData.message) throw new Error('Manifest API: ' + manifestData.message);
 
+      var today = todayStr();
+      manifests = (manifestData.manifestCollection || []).filter(function(m) {
+        return m.dropzoneId === config.dzId && m.manifestDate === today;
+      });
+
+      // Collect pilot / co-pilot / jump-master colleague ids so we can resolve
+      // them to names (the manifest only carries the ids, not the names).
+      var colIds = {};
+      manifests.forEach(function(m) {
+        [m.pilotColleagueId, m.coPilotColleagueId, m.jumpMasterColleagueId].forEach(function(id) { if (id) colIds[id] = 1; });
+      });
+      var colIdList = Object.keys(colIds);
+      var colUrl = colIdList.length
+        ? BASE_URL + '/colleagues:headers?archived_status=active&ids=' + encodeURIComponent(colIdList.join(','))
+        : null;
+
       // Secondary calls — tolerant: a failure here shouldn't blank the board.
-      const [weatherData, planesData, dzData] = await Promise.all([
+      const [weatherData, planesData, dzData, colData] = await Promise.all([
         fetchJsonViaProxies(weatherUrl, proxies).catch(function() { return {}; }),
         fetchJsonViaProxies(planesUrl, proxies).catch(function() { return null; }),
-        !dzInfo ? fetchJsonViaProxies(dzUrl, proxies).catch(function() { return null; }) : Promise.resolve(null)
+        !dzInfo ? fetchJsonViaProxies(dzUrl, proxies).catch(function() { return null; }) : Promise.resolve(null),
+        colUrl ? fetchJsonViaProxies(colUrl, proxies).catch(function() { return null; }) : Promise.resolve(null)
       ]);
+
+      // Resolve colleague ids → names for pilot / JM display.
+      colleagueNames = {};
+      if (colData && colData.colleagueHeaderCollection) {
+        colData.colleagueHeaderCollection.forEach(function(c) { colleagueNames[c.id] = c.fullName; });
+      }
 
       // Build full planes lookup (all DZs)
       var allPlanesMap = {};
@@ -1370,11 +1454,6 @@ body {
           }
         } catch(e) {}
       }
-
-      const today = todayStr();
-      manifests = (manifestData.manifestCollection || []).filter(function(m) {
-        return m.dropzoneId === config.dzId && m.manifestDate === today;
-      });
 
       // Filter planesMap to only aircraft used on this DZ's manifests
       planesMap = {};
@@ -1520,7 +1599,7 @@ body {
   }
 
   // --- Helpers ---
-  var statusLabels = { airborne: 'In Air', trained: 'Kit On', candidate: 'Manifested', landedComplete: 'Landed', landedPartial: 'Landed (Partial)', draft: 'Draft' };
+  var statusLabels = { airborne: 'In Air', trained: 'Kit On', candidate: 'Manifested', landedComplete: 'Landed', landedPartial: 'Landed (Partial)', draft: 'Draft', cancelled: 'Cancelled' };
 
   function fmtTime(iso) {
     if (!iso) return null;
@@ -1834,6 +1913,9 @@ body {
           if (skydiveResult === 'declined') tags += '<span class="tag tag-declined">Declined</span>';
           if (cust.skydiveConditions) tags += '<span class="tag tag-condition" title="' + esc(cust.skydiveConditions) + '">' + esc(cust.skydiveConditions) + '</span>';
           if (cust.evaluationConditions) tags += '<span class="tag tag-note" title="' + esc(cust.evaluationConditions) + '">' + esc(cust.evaluationConditions) + '</span>';
+          if (custSet && custSet.requiresCoach) tags += '<span class="tag tag-coach">Coach</span>';
+          if (cust.isGpMedical) tags += '<span class="tag tag-med">GP Med</span>';
+          if (cust.isUsingOwnEquipment) tags += '<span class="tag tag-own">Own kit</span>';
           if (!cust.fitSignatureFileLocation) tags += '<span class="tag tag-nosig">No sig</span>';
           if (cust.prominantNote) tags += '<span class="tag tag-note" title="' + esc(cust.prominantNote) + '">' + esc(cust.prominantNote) + '</span>';
 
@@ -1921,6 +2003,9 @@ body {
           if (cust.skydiveConditions) tags += '<span class="tag tag-condition" title="' + esc(cust.skydiveConditions) + '">' + esc(cust.skydiveConditions) + '</span>';
           if (cust.evaluationConditions) tags += '<span class="tag tag-note" title="' + esc(cust.evaluationConditions) + '">' + esc(cust.evaluationConditions) + '</span>';
           if (cust.prominantNote) tags += '<span class="tag tag-note" title="' + esc(cust.prominantNote) + '">' + esc(cust.prominantNote) + '</span>';
+          if (custSet && custSet.requiresCoach) tags += '<span class="tag tag-coach">Coach</span>';
+          if (cust.isGpMedical) tags += '<span class="tag tag-med">GP Med</span>';
+          if (cust.isUsingOwnEquipment) tags += '<span class="tag tag-own">Own kit</span>';
           if (!cust.fitSignatureFileLocation) tags += '<span class="tag tag-nosig">No sig</span>';
 
           return '<div class="sport-row">' +
@@ -1972,6 +2057,9 @@ body {
           if (cust.skydiveConditions) tags += '<span class="tag tag-condition" title="' + esc(cust.skydiveConditions) + '">' + esc(cust.skydiveConditions) + '</span>';
           if (cust.evaluationConditions) tags += '<span class="tag tag-note" title="' + esc(cust.evaluationConditions) + '">' + esc(cust.evaluationConditions) + '</span>';
           if (cust.prominantNote) tags += '<span class="tag tag-note" title="' + esc(cust.prominantNote) + '">' + esc(cust.prominantNote) + '</span>';
+          if (custSet && custSet.requiresCoach) tags += '<span class="tag tag-coach">Coach</span>';
+          if (cust.isGpMedical) tags += '<span class="tag tag-med">GP Med</span>';
+          if (cust.isUsingOwnEquipment) tags += '<span class="tag tag-own">Own kit</span>';
           if (!cust.fitSignatureFileLocation) tags += '<span class="tag tag-nosig">No sig</span>';
 
           affHtml += '<div class="aff-row">' +
@@ -2016,18 +2104,53 @@ body {
         '</div>';
       }
 
-      return '<div class="load-card" data-status="' + statusClass + '">' +
+      // Cancelled load — show it struck-through rather than silently dropping it.
+      var isCancelled = !!m.cancelledDateTime || m.manifestStatus === 'cancelled';
+      var cardStatus = isCancelled ? 'cancelled' : statusClass;
+
+      // Seats filled vs aircraft capacity.
+      var seatFilled = (m.passengerSlots != null ? m.passengerSlots : totalJumpers);
+      var seatTotal = m.planeSlots || (planeInfo && planeInfo.capacity) || null;
+      var seatsHtml = seatTotal
+        ? '<span class="seats-badge' + (seatFilled >= seatTotal ? ' full' : '') + '" title="Seats filled">' + seatFilled + '/' + seatTotal + '</span>'
+        : '';
+
+      // Pilot / co-pilot / jump-master names (resolved from colleague ids).
+      var pilotName = m.pilotColleagueId && colleagueNames[m.pilotColleagueId];
+      var coPilotName = m.coPilotColleagueId && colleagueNames[m.coPilotColleagueId];
+      var jmName = m.jumpMasterColleagueId && colleagueNames[m.jumpMasterColleagueId];
+      if (!jmName && m.jumpMasterCustomerId) {
+        var jmCust = customers.find(function(c) { return c.customerId === m.jumpMasterCustomerId; });
+        if (jmCust) jmName = jmCust.fullName;
+      }
+      var crewBits = [];
+      if (pilotName) crewBits.push('<span class="crew-role">Pilot</span> ' + esc(pilotName) + (coPilotName ? ' &amp; ' + esc(coPilotName) : ''));
+      if (jmName) crewBits.push('<span class="crew-role">JM</span> ' + esc(jmName));
+      var crewHtml = crewBits.length ? '<div class="card-crew">' + crewBits.join('<span class="crew-sep">&bull;</span>') + '</div>' : '';
+
+      // Outstanding approval requirements (flight-line checks, etc.).
+      var approvalHtml = '';
+      if (m.approvalRequirements && !m.approvedDateTime && !isCancelled) {
+        var reqs = String(m.approvalRequirements).split('\n').map(function(s) { return s.trim(); }).filter(Boolean);
+        if (reqs.length) approvalHtml = '<div class="card-approvals"><span class="card-approvals-title">Outstanding checks</span>' +
+          reqs.map(function(r) { return '<div class="approval-line">' + esc(r) + '</div>'; }).join('') + '</div>';
+      }
+
+      return '<div class="load-card' + (isCancelled ? ' cancelled' : '') + '" data-status="' + cardStatus + '">' +
         '<div class="card-header">' +
           '<span class="lift-number">' + (m.liftNumber != null ? 'Lift #' + m.liftNumber : 'Unscheduled') + '</span>' +
           planeRegHtml +
-          '<span class="status-badge ' + statusClass + '">' + statusLabel + '</span>' +
+          '<span class="status-badge ' + cardStatus + '">' + (isCancelled ? 'Cancelled' : statusLabel) + '</span>' +
           liveAltHtml +
           '<div class="card-meta">' +
             (timeStr ? '<span>' + timeStr + '</span>' : '') +
             (alt ? '<span class="alt-tag">' + alt + '</span>' : '') +
+            seatsHtml +
             '<span class="jumper-count"><svg viewBox="0 0 24 24"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/></svg> ' + totalJumpers + '</span>' +
           '</div>' +
         '</div>' +
+        crewHtml +
+        approvalHtml +
         weightBarHtml +
         (hasBody ? '<div class="card-body">' + sportsHtml + affHtml + tandemHtml + '</div>' : '') +
       '</div>';
