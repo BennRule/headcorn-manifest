@@ -1535,6 +1535,24 @@ body {
   // --- Aircraft tracking via adsb.lol ---
   var ADSB_BASE = 'https://api.adsb.lol/v2/reg/';
 
+  // adsb.lol has no CORS headers, so a browser can't call it directly — walk the
+  // proxy chain (no auth header needed) until one returns parseable JSON.
+  async function fetchAdsbJson(reg, proxies) {
+    var url = ADSB_BASE + encodeURIComponent(reg);
+    for (var i = 0; i < proxies.length; i++) {
+      var ctrl = new AbortController();
+      var timer = setTimeout(function() { ctrl.abort(); }, 6000);
+      try {
+        var res = await fetch(proxies[i] + encodeURIComponent(url), { cache: 'no-store', signal: ctrl.signal });
+        clearTimeout(timer);
+        if (!res.ok) continue;                                   // 429 / proxy error → next
+        var text = await res.text();
+        try { return JSON.parse(text); } catch (e) { continue; } // non-JSON challenge page → next
+      } catch (e) { clearTimeout(timer); }                       // network / timeout → next
+    }
+    return null;
+  }
+
   function hasAirborneManifest() {
     return manifests.some(function(m) { return m.manifestStatus === 'airborne'; });
   }
@@ -1569,7 +1587,7 @@ body {
       return;
     }
 
-    var proxy = config.proxy || '';
+    var proxies = proxyChain();
     var newLive = {};
     var CARRY_MS = 90000; // keep last-known position for up to 90s across dropouts / rate limits
 
@@ -1582,17 +1600,10 @@ body {
 
     // Fetch all in parallel
     var fetches = regs.map(function(reg) {
-      var url = ADSB_BASE + encodeURIComponent(reg);
-      var controller = new AbortController();
-      var timer = setTimeout(function() { controller.abort(); }, 4000);
-      // Direct first (adsb.lol is CORS-open); only fall back to a proxy if one is set.
-      return fetch(url, { signal: controller.signal, cache: 'no-store' })
-        .catch(function() { return proxy ? fetch(proxy + encodeURIComponent(url), { cache: 'no-store' }) : Promise.reject(new Error('no proxy')); })
-        .then(function(res) {
-          clearTimeout(timer);
-          if (!res.ok) throw new Error('HTTP ' + res.status); // 429 / error → carry forward
-          return res.json();
-        })
+      // adsb.lol sends no CORS headers, so from the browser it must go through
+      // the proxy chain (same as the manifest API). Your Cloudflare Worker makes
+      // this reliable; the free proxies are best-effort.
+      return fetchAdsbJson(reg, proxies)
         .then(function(data) {
           var ac = data && data.ac && data.ac.length > 0 ? data.ac[0] : null;
           if (!ac || ac.seen > 60) { carryForward(reg); return; }  // no fresh fix → keep last-known
@@ -1629,8 +1640,7 @@ body {
           newLive[reg] = entry;
         })
         .catch(function() {
-          clearTimeout(timer);
-          carryForward(reg); // network / timeout / 429 → keep last-known
+          carryForward(reg); // safety net → keep last-known
         });
     });
 
