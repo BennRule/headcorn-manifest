@@ -334,6 +334,27 @@ body {
   opacity: 0.6;
 }
 
+.ac-wind, .ac-temp, .ac-geom, .ac-squawk {
+  font-size: 11px;
+  opacity: 0.7;
+}
+
+.ac-emergency {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 700;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #fca5a5;
+}
+
+.card-live-phase {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
 .card-plane-reg {
   font-family: 'DM Mono', monospace;
   font-size: 12px;
@@ -1556,14 +1577,21 @@ body {
           var prev = aircraftLive[reg];
           var entry = {
             alt_baro: ac.alt_baro,
+            alt_geom: typeof ac.alt_geom === 'number' ? ac.alt_geom : null,
             gs: ac.gs,
             baro_rate: ac.baro_rate,
+            geom_rate: typeof ac.geom_rate === 'number' ? ac.geom_rate : null,
             lat: ac.lat,
             lon: ac.lon,
             on_ground: isGround,
             seen: ac.seen,
             flight: (ac.flight || '').trim(),
             track: ac.track,
+            wd: typeof ac.wd === 'number' ? ac.wd : null,   // wind direction aloft
+            ws: typeof ac.ws === 'number' ? ac.ws : null,   // wind speed aloft (kt)
+            oat: typeof ac.oat === 'number' ? ac.oat : null, // outside air temp (°C)
+            squawk: ac.squawk || null,
+            emergency: (ac.emergency && ac.emergency !== 'none') ? ac.emergency : null,
             _staleCount: 0
           };
           if (prev && prev.alt_baro === ac.alt_baro && prev.gs === ac.gs && prev.lat === ac.lat && prev.lon === ac.lon) {
@@ -1805,6 +1833,16 @@ body {
 
       if (status.speed !== null && status.state !== 'ground' && status.state !== 'no-data') {
         html += '<span class="ac-speed">' + status.speed + ' kts</span>';
+      }
+
+      // Extra live telemetry (when the feed provides it and the plane is up)
+      var ac = aircraftLive[reg];
+      if (ac && status.state !== 'ground' && status.state !== 'no-data') {
+        if (ac.emergency) html += '<span class="ac-emergency">&#9888; ' + esc(String(ac.emergency).toUpperCase()) + '</span>';
+        if (ac.ws !== null && ac.wd !== null) html += '<span class="ac-wind" title="Winds aloft">&#128168; ' + Math.round(ac.wd) + '&deg; ' + Math.round(ac.ws) + ' kt</span>';
+        if (ac.oat !== null) html += '<span class="ac-temp" title="Air temp at altitude">' + Math.round(ac.oat) + '&deg;C</span>';
+        if (ac.alt_geom !== null) html += '<span class="ac-geom" title="GPS altitude">GPS ' + Math.round(ac.alt_geom).toLocaleString() + ' ft</span>';
+        if (ac.squawk) html += '<span class="ac-squawk" title="Squawk">SQ ' + esc(ac.squawk) + '</span>';
       }
 
       html += '</div>';
@@ -2107,8 +2145,13 @@ body {
       var liveAltHtml = '';
       if (m.manifestStatus === 'airborne' && planeReg && aircraftLive[planeReg]) {
         var acStatus = getAircraftStatus(planeReg);
-        if (acStatus.alt !== null) {
-          liveAltHtml = '<span class="card-live-alt">' + acStatus.icon + ' ' + Math.round(acStatus.alt).toLocaleString() + ' ft</span>';
+        if (acStatus.state !== 'no-data') {
+          var liveParts = acStatus.icon + ' <span class="card-live-phase">' + acStatus.label + '</span>';
+          if (acStatus.alt !== null) liveParts += ' ' + Math.round(acStatus.alt).toLocaleString() + ' ft';
+          if (acStatus.rate && Math.abs(acStatus.rate) > 100) {
+            liveParts += ' ' + (acStatus.rate > 0 ? '&uarr;' : '&darr;') + Math.abs(Math.round(acStatus.rate)) + ' fpm';
+          }
+          liveAltHtml = '<span class="card-live-alt">' + liveParts + '</span>';
         }
       }
 
