@@ -814,24 +814,23 @@ body {
 }
 .crew-sep { color: var(--slate-300); }
 
-.card-approvals {
-  margin: 10px 16px 0;
-  padding: 8px 10px;
-  background: var(--amber-100);
-  border-radius: 6px;
-  border-left: 3px solid var(--amber-500);
+/* Outstanding-check icon shown next to a name (tooltip carries the detail) */
+.check-flag {
+  display: inline-flex;
+  align-items: center;
+  vertical-align: middle;
+  margin-left: 4px;
+  cursor: help;
 }
-.card-approvals-title {
-  display: block;
-  font-family: 'Barlow Condensed', sans-serif;
-  font-weight: 600;
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  color: #92400e;
-  margin-bottom: 3px;
+.check-flag svg {
+  width: 15px;
+  height: 15px;
+  fill: none;
+  stroke: var(--amber-500);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
-.approval-line { font-size: 12px; color: #92400e; line-height: 1.35; }
 
 .load-card.cancelled { opacity: 0.55; }
 .load-card.cancelled .lift-number { text-decoration: line-through; }
@@ -1861,6 +1860,26 @@ body {
       var customers = m.customers || [];
       var colleagues = m.colleagues || [];
       var firstSet = sets[0];
+
+      // Outstanding approval requirements are keyed by person name, e.g.
+      // "Customer Faith Orr: flight-line check." — map name → requirement so we
+      // can show a small icon beside each name instead of one big block.
+      var approvalByName = {};
+      if (m.approvalRequirements && !m.approvedDateTime && !(m.cancelledDateTime || m.manifestStatus === 'cancelled')) {
+        String(m.approvalRequirements).split('\n').forEach(function(line) {
+          var mm = line.trim().match(/^(?:Customer|Colleague)\s+(.+?):\s*(.+?)\.?$/);
+          if (mm) {
+            var nm = mm[1].trim(), req = mm[2].trim();
+            approvalByName[nm] = approvalByName[nm] ? approvalByName[nm] + '; ' + req : req;
+          }
+        });
+      }
+      function nameCheck(name) {
+        if (!name || !approvalByName[name]) return '';
+        return '<span class="check-flag" title="' + esc(approvalByName[name]) + '">' +
+          '<svg viewBox="0 0 24 24"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2M9 5a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2M9 5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2m-6 9 2 2 4-4"/></svg>' +
+          '</span>';
+      }
       var alt = firstSet ? fmtAlt(firstSet.jumpAltitudeInFt) : '';
       var totalJumpers = (m.customerCount || 0) + (m.colleagueCount || 0);
       var statusClass = m.manifestStatus;
@@ -1903,8 +1922,8 @@ body {
           var skydiveResult = custSet ? custSet.skydiveResult : null;
 
           var crewParts = [];
-          if (instructor) crewParts.push(esc(instructor.fullName));
-          if (videographer) crewParts.push(esc(videographer.fullName));
+          if (instructor) crewParts.push(esc(instructor.fullName) + nameCheck(instructor.fullName));
+          if (videographer) crewParts.push(esc(videographer.fullName) + nameCheck(videographer.fullName));
 
           var tags = '';
           if (custAlt) tags += '<span class="tag tag-alt">' + custAlt + '</span>';
@@ -1921,7 +1940,7 @@ body {
 
           return '<div class="tandem-row">' +
             '<div class="tandem-info">' +
-              '<div class="tandem-customer">' + esc(cust.fullName) + '</div>' +
+              '<div class="tandem-customer">' + esc(cust.fullName) + nameCheck(cust.fullName) + '</div>' +
               (crewParts.length ? '<div class="tandem-crew">' + crewParts.join(' &bull; ') + '</div>' : '') +
             '</div>' +
             '<div class="tandem-tags">' + tags + '</div>' +
@@ -1965,7 +1984,7 @@ body {
 
           sportsHtml += '<div class="sport-row">' +
             '<div class="sport-info">' +
-              '<div class="sport-name">' + esc(col.fullName) + '</div>' +
+              '<div class="sport-name">' + esc(col.fullName) + nameCheck(col.fullName) + '</div>' +
               (details.length ? '<div class="sport-detail">' + details.join('') + '</div>' : '') +
             '</div>' +
             '<div class="sport-tags">' + bpaBadge + tags + '</div>' +
@@ -2010,7 +2029,7 @@ body {
 
           return '<div class="sport-row">' +
             '<div class="sport-info">' +
-              '<div class="sport-name">' + esc(cust.fullName) + '</div>' +
+              '<div class="sport-name">' + esc(cust.fullName) + nameCheck(cust.fullName) + '</div>' +
               (details.length ? '<div class="sport-detail">' + details.join('') + '</div>' : '') +
             '</div>' +
             '<div class="sport-tags">' + bpaBadge + tags + '</div>' +
@@ -2042,8 +2061,8 @@ body {
           var skydiveResult = custSet ? custSet.skydiveResult : null;
 
           var crewParts = [];
-          if (instructor) crewParts.push(esc(instructor.fullName));
-          if (secondInstructor) crewParts.push(esc(secondInstructor.fullName));
+          if (instructor) crewParts.push(esc(instructor.fullName) + nameCheck(instructor.fullName));
+          if (secondInstructor) crewParts.push(esc(secondInstructor.fullName) + nameCheck(secondInstructor.fullName));
 
           var details = [];
           if (cust.weightInLbs) details.push('<span>' + cust.weightInLbs + ' lbs</span>');
@@ -2064,7 +2083,7 @@ body {
 
           affHtml += '<div class="aff-row">' +
             '<div class="aff-info">' +
-              '<div class="aff-name">' + esc(cust.fullName) + '</div>' +
+              '<div class="aff-name">' + esc(cust.fullName) + nameCheck(cust.fullName) + '</div>' +
               (crewParts.length ? '<div class="aff-crew">' + crewParts.join(' &bull; ') + '</div>' : '') +
               (details.length ? '<div class="aff-detail">' + details.join('') + '</div>' : '') +
             '</div>' +
@@ -2128,14 +2147,6 @@ body {
       if (jmName) crewBits.push('<span class="crew-role">JM</span> ' + esc(jmName));
       var crewHtml = crewBits.length ? '<div class="card-crew">' + crewBits.join('<span class="crew-sep">&bull;</span>') + '</div>' : '';
 
-      // Outstanding approval requirements (flight-line checks, etc.).
-      var approvalHtml = '';
-      if (m.approvalRequirements && !m.approvedDateTime && !isCancelled) {
-        var reqs = String(m.approvalRequirements).split('\n').map(function(s) { return s.trim(); }).filter(Boolean);
-        if (reqs.length) approvalHtml = '<div class="card-approvals"><span class="card-approvals-title">Outstanding checks</span>' +
-          reqs.map(function(r) { return '<div class="approval-line">' + esc(r) + '</div>'; }).join('') + '</div>';
-      }
-
       return '<div class="load-card' + (isCancelled ? ' cancelled' : '') + '" data-status="' + cardStatus + '">' +
         '<div class="card-header">' +
           '<span class="lift-number">' + (m.liftNumber != null ? 'Lift #' + m.liftNumber : 'Unscheduled') + '</span>' +
@@ -2150,7 +2161,6 @@ body {
           '</div>' +
         '</div>' +
         crewHtml +
-        approvalHtml +
         weightBarHtml +
         (hasBody ? '<div class="card-body">' + sportsHtml + affHtml + tandemHtml + '</div>' : '') +
       '</div>';
