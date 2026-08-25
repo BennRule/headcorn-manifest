@@ -860,6 +860,25 @@ body {
 .tag-coach { background: #ecfeff; color: #0e7490; }
 .tag-med { background: var(--red-100); color: #991b1b; }
 .tag-own { background: var(--slate-100); color: var(--slate-600); }
+.tag-event { background: #fce7f3; color: #9d174d; }
+
+.card-note {
+  padding: 6px 16px;
+  font-size: 12px;
+  font-style: italic;
+  color: var(--slate-500);
+  border-bottom: 1px solid var(--slate-100);
+}
+
+.ac-next {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 600;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--amber-500);
+  margin-left: 4px;
+}
 
 /* Sidebar */
 .sidebar {
@@ -1459,7 +1478,8 @@ body {
               registration: p.registration,
               planeName: p.planeName,
               maxWeightInLbs: p.maxLoadWeightInLbs,
-              capacity: p.capacityPassengers
+              capacity: p.capacityPassengers,
+              turnaroundMins: p.targetTurnaroundMins || null
             };
           }
         });
@@ -1621,6 +1641,10 @@ body {
       var sa = statusOrder[a.manifestStatus] !== undefined ? statusOrder[a.manifestStatus] : 5;
       var sb = statusOrder[b.manifestStatus] !== undefined ? statusOrder[b.manifestStatus] : 5;
       if (sa !== sb) return sa - sb;
+      // Within a status group, honour the DZ's own manual ordering (displayPosition).
+      if (a.displayPosition != null && b.displayPosition != null && a.displayPosition !== b.displayPosition) {
+        return a.displayPosition - b.displayPosition;
+      }
       return (a.liftNumber || 999) - (b.liftNumber || 999);
     });
   }
@@ -1776,6 +1800,28 @@ body {
     return { state: 'airborne', label: 'Level Flight', icon: '✈', alt: alt, rate: rate, speed: speed };
   }
 
+  // Estimate the next takeoff time from the most recent landing + the plane's
+  // target turnaround. Only meaningful when a load is waiting and none is up.
+  function estimateNextLoad() {
+    var hasUpcoming = manifests.some(function(m) {
+      return ['candidate', 'trained', 'approved', 'flightLineChecked'].indexOf(m.manifestStatus) >= 0;
+    });
+    var airborne = manifests.some(function(m) { return m.manifestStatus === 'airborne'; });
+    if (!hasUpcoming || airborne) return null;
+    var lastLanded = null;
+    manifests.forEach(function(m) {
+      if (m.landedDateTime) {
+        var t = new Date(m.landedDateTime).getTime();
+        if (!lastLanded || t > lastLanded) lastLanded = t;
+      }
+    });
+    if (!lastLanded) return null;
+    var turnaround = 0;
+    Object.keys(planesMap).forEach(function(id) { if (planesMap[id].turnaroundMins) turnaround = planesMap[id].turnaroundMins; });
+    if (!turnaround) return null;
+    return new Date(lastLanded + turnaround * 60000).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+  }
+
   function renderAircraft() {
     // Get registrations assigned to today's manifests + any with live data
     var todayRegs = {};
@@ -1847,6 +1893,10 @@ body {
 
       html += '</div>';
     });
+
+    // Estimated next takeoff (last landing + turnaround)
+    var nextLoad = estimateNextLoad();
+    if (nextLoad) html += '<span class="ac-next" title="Estimated: last landing + turnaround">Next &asymp;' + nextLoad + '</span>';
 
     $aircraftBar.innerHTML = html;
   }
@@ -2190,11 +2240,23 @@ body {
       if (jmName) crewBits.push('<span class="crew-role">JM</span> ' + esc(jmName));
       var crewHtml = crewBits.length ? '<div class="card-crew">' + crewBits.join('<span class="crew-sep">&bull;</span>') + '</div>' : '';
 
+      // Setup requirements / approval notes as a compact info line.
+      var noteBits = [];
+      if (m.setupRequirements) noteBits.push(esc(m.setupRequirements));
+      if (m.approvalNotes) noteBits.push(esc(m.approvalNotes));
+      var cardNoteHtml = noteBits.length ? '<div class="card-note">&#9432; ' + noteBits.join(' &middot; ') + '</div>' : '';
+
+      // Special-event tags gathered from the load's sets (e.g. boogie, charity).
+      var eventSet = {};
+      sets.forEach(function(s) { if (s.specialEvent) eventSet[s.specialEvent] = 1; });
+      var eventHtml = Object.keys(eventSet).map(function(e) { return '<span class="tag tag-event">' + esc(e) + '</span>'; }).join('');
+
       return '<div class="load-card' + (isCancelled ? ' cancelled' : '') + '" data-status="' + cardStatus + '">' +
         '<div class="card-header">' +
           '<span class="lift-number">' + (m.liftNumber != null ? 'Lift #' + m.liftNumber : 'Unscheduled') + '</span>' +
           planeRegHtml +
           '<span class="status-badge ' + cardStatus + '">' + (isCancelled ? 'Cancelled' : statusLabel) + '</span>' +
+          eventHtml +
           liveAltHtml +
           '<div class="card-meta">' +
             (timeStr ? '<span>' + timeStr + '</span>' : '') +
@@ -2204,6 +2266,7 @@ body {
           '</div>' +
         '</div>' +
         crewHtml +
+        cardNoteHtml +
         weightBarHtml +
         (hasBody ? '<div class="card-body">' + sportsHtml + affHtml + tandemHtml + '</div>' : '') +
       '</div>';
