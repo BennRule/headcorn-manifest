@@ -1508,7 +1508,7 @@ body {
 
       fetchFailed = false;
       lastUpdateTime = new Date();
-      setStatus('ok', 'Live');
+      setStatus('ok', realtimeConnected ? '⚡ Live' : 'Live');
 
       // Check for status changes and notify
       checkNotifications(manifests);
@@ -2442,10 +2442,91 @@ body {
   }
 
   // --- Polling ---
+  // --- Realtime (Ably SSE — native EventStream, no SDK) ---
+  // The DZ publishes to an Ably channel "manifesting:<dzId>" whenever a load
+  // changes. We subscribe over Ably's SSE endpoint (works cross-origin, no
+  // proxy) and simply refetch on any message — the same refresh-on-change
+  // behaviour as the official wallboard. Token comes from the API (via the
+  // proxy). Everything degrades silently to polling if realtime is unavailable.
+  var sseController = null;
+  var sseReconnectTimer = null;
+  var realtimeRefetchTimer = null;
+  var realtimeConnected = false;
+  var REALTIME_DEBOUNCE_MS = 1200; // collapse bursts of changes into one refetch
+
+  function stopRealtime() {
+    realtimeConnected = false;
+    if (sseController) { try { sseController.abort(); } catch (e) {} sseController = null; }
+    if (sseReconnectTimer) { clearTimeout(sseReconnectTimer); sseReconnectTimer = null; }
+  }
+
+  function scheduleRealtimeReconnect(delay) {
+    if (sseReconnectTimer) clearTimeout(sseReconnectTimer);
+    sseReconnectTimer = setTimeout(startRealtime, delay || 15000);
+  }
+
+  function scheduleRealtimeRefetch() {
+    if (realtimeRefetchTimer) return;
+    realtimeRefetchTimer = setTimeout(function() {
+      realtimeRefetchTimer = null;
+      fetchData();
+    }, REALTIME_DEBOUNCE_MS);
+  }
+
+  async function startRealtime() {
+    stopRealtime();
+    var proxies = proxyChain();
+    var tokenData;
+    try {
+      tokenData = await fetchJsonViaProxies(BASE_URL + '/base/me/ably-token', proxies);
+    } catch (e) { scheduleRealtimeReconnect(); return; }
+    var cat = tokenData && tokenData.clientAccessToken;
+    if (!cat || !cat.token) { scheduleRealtimeReconnect(); return; }
+
+    // Refresh the token ~1 min before it expires (default ~1h).
+    if (cat.expires) {
+      sseReconnectTimer = setTimeout(startRealtime, Math.max(30000, cat.expires - Date.now() - 60000));
+    }
+
+    var sseUrl = 'https://realtime.ably.io/sse?v=1.2&channels=' +
+      encodeURIComponent('manifesting:' + config.dzId) + '&access_token=' + encodeURIComponent(cat.token);
+    var controller = new AbortController();
+    sseController = controller;
+
+    try {
+      var res = await fetch(sseUrl, { signal: controller.signal });
+      if (!res.ok || !res.body) throw new Error('SSE HTTP ' + res.status);
+      realtimeConnected = true;
+      if (lastUpdateTime) setStatus('ok', '⚡ Live');
+      var reader = res.body.getReader();
+      var decoder = new TextDecoder();
+      var buf = '';
+      while (true) {
+        var chunk = await reader.read();
+        if (chunk.done) break;
+        buf += decoder.decode(chunk.value, { stream: true }).replace(/\r\n/g, '\n');
+        var frames = buf.split('\n\n');
+        buf = frames.pop();
+        frames.forEach(function(frame) {
+          var f = frame.trim();
+          if (!f || f.charAt(0) === ':') return;   // keepalive / comment
+          if (f.indexOf('data:') === -1) return;    // no payload (connection acks etc.)
+          scheduleRealtimeRefetch();                // a change occurred → refetch
+        });
+      }
+      throw new Error('stream closed');
+    } catch (e) {
+      realtimeConnected = false;
+      if (controller.signal.aborted) return;        // deliberate stop / token handoff
+      scheduleRealtimeReconnect();
+    }
+  }
+
   function startPolling() {
     if (pollTimer) clearInterval(pollTimer);
     fetchData();
     pollTimer = setInterval(fetchData, config.interval * 1000);
+    startRealtime();
   }
 
   // --- Settings ---
