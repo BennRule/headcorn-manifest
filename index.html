@@ -405,6 +405,8 @@ a.card-plane-reg:hover, a.ac-reg:hover { text-decoration: underline; }
   font-weight: 500;
 }
 
+.card-live-alt.card-no-track { color: var(--slate-400); }
+
 /* Weight bar */
 .weight-bar-wrap {
   padding: 0 16px 8px;
@@ -1419,6 +1421,15 @@ a.card-plane-reg:hover, a.ac-reg:hover { text-decoration: underline; }
     return d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
   }
 
+  // Whole minutes since takeoff, for the "In Air, no live track" fallback. null if unknown/insane.
+  function minsSinceTakeoff(dt) {
+    if (!dt) return null;
+    var t = new Date(dt).getTime();
+    if (isNaN(t)) return null;
+    var mins = Math.floor((Date.now() - t) / 60000);
+    return (mins >= 0 && mins < 600) ? mins : null;
+  }
+
   // Ordered list of proxies to try: the Settings override first (if set), then
   // the built-in fallback chain. Blanks dropped, duplicates removed.
   function proxyChain() {
@@ -1864,9 +1875,10 @@ a.card-plane-reg:hover, a.ac-reg:hover { text-decoration: underline; }
     if (alt !== null && alt >= 10000 && speed !== null && speed < 110) {
       return { state: 'run-in', label: 'Run In', icon: '🎯', alt: alt, rate: rate, speed: speed };
     }
-    // Canopy: level/slow descent below 5,000 ft, very slow (likely canopy ride or circuit)
+    // Low and slow below 5,000 ft — the aircraft is in the circuit / landing.
+    // (This tracks the plane, not the jumpers, so it's "Landing", not "Canopy".)
     if (alt !== null && alt < 5000 && alt > 500 && speed !== null && speed < 60) {
-      return { state: 'canopy', label: 'Canopy', icon: '🪂', alt: alt, rate: rate, speed: speed };
+      return { state: 'canopy', label: 'Landing', icon: '🛬', alt: alt, rate: rate, speed: speed };
     }
     // Level flight (transit/circuit)
     return { state: 'airborne', label: 'Level Flight', icon: '✈', alt: alt, rate: rate, speed: speed };
@@ -2265,15 +2277,21 @@ a.card-plane-reg:hover, a.ac-reg:hover { text-decoration: underline; }
 
       // Live altitude — only show if this manifest is airborne
       var liveAltHtml = '';
-      if (m.manifestStatus === 'airborne' && planeReg && aircraftLive[planeReg]) {
-        var acStatus = getAircraftStatus(planeReg);
-        if (acStatus.state !== 'no-data') {
+      if (m.manifestStatus === 'airborne') {
+        var acStatus = (planeReg && aircraftLive[planeReg]) ? getAircraftStatus(planeReg) : null;
+        if (acStatus && acStatus.state !== 'no-data') {
           var liveParts = acStatus.icon + ' <span class="card-live-phase">' + acStatus.label + '</span>';
           if (acStatus.alt !== null) liveParts += ' ' + Math.round(acStatus.alt).toLocaleString() + ' ft';
           if (acStatus.rate && Math.abs(acStatus.rate) > 100) {
             liveParts += ' ' + (acStatus.rate > 0 ? '&uarr;' : '&darr;') + Math.abs(Math.round(acStatus.rate)) + ' fpm';
           }
           liveAltHtml = '<span class="card-live-alt">' + liveParts + '</span>';
+        } else {
+          // Airborne but no ADS-B fix — show time since takeoff so it reads as
+          // "flying, no live track" rather than looking broken.
+          var since = minsSinceTakeoff(m.takeOffDateTime);
+          liveAltHtml = '<span class="card-live-alt card-no-track">&#9992; <span class="card-live-phase">In Air</span>' +
+            (since !== null ? ' &middot; ' + since + ' min' : '') + ' &middot; no live track</span>';
         }
       }
 
