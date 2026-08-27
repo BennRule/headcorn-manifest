@@ -907,9 +907,10 @@ a.card-plane-reg:hover, a.ac-reg:hover { text-decoration: underline; }
 .wx-lp-controls { display: flex; gap: 6px; margin-bottom: 8px; }
 .lp-hand-btn { flex: 1; font-family: 'Barlow Condensed', sans-serif; font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; padding: 5px; border: 1px solid var(--slate-200); background: white; color: var(--slate-500); border-radius: 5px; cursor: pointer; }
 .lp-hand-btn.active { background: var(--slate-800); color: white; border-color: var(--slate-800); }
-.lp-map { position: relative; width: 100%; max-width: 280px; margin: 2px auto; aspect-ratio: 1 / 1; border-radius: 8px; overflow: hidden; border: 1px solid var(--slate-200); background: var(--slate-100); }
+.lp-map { position: relative; width: 100%; max-width: 280px; margin: 2px auto; aspect-ratio: 1 / 1; border-radius: 8px; overflow: hidden; border: 1px solid var(--slate-200); background: var(--slate-100); cursor: crosshair; }
 .lp-map-bg { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; }
-.lp-overlay { position: absolute; inset: 0; width: 100%; height: 100%; }
+.lp-overlay { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.lp-hint { font-size: 10px; color: var(--slate-400); text-align: center; margin-top: 3px; }
 .lp-leg { fill: none; stroke-width: 3; }
 .lp-dash { stroke: #ffffff; stroke-dasharray: 5 4; }
 .lp-final { stroke: #22c55e; }
@@ -1303,6 +1304,7 @@ a.card-plane-reg:hover, a.ac-reg:hover { text-decoration: underline; }
   let weather = null;        // Open-Meteo forecast (ground + winds aloft)
   let weatherTimer = null;
   let landingHand = 'left';  // landing-pattern circuit direction
+  let landing = null;        // {lat, lon} of the actual landing area (tap-to-set, saved)
   let planesMap = {};       // planeId → { registration, planeName, maxWeightInLbs, capacity }
   let aircraftLive = {};    // registration → { alt_baro, gs, baro_rate, lat, lon, on_ground, seen }
   let dzInfo = null;        // { lat, lon, name } from /dropzones
@@ -2409,17 +2411,40 @@ a.card-plane-reg:hover, a.ac-reg:hover { text-decoration: underline; }
   }
 
   // Free satellite image of the DZ (Esri World Imagery, no API key, CORS-open),
-  // as a square Web-Mercator export centred on the dropzone.
-  function satUrl() {
-    var lat = (dzInfo && dzInfo.lat) || 51.156;
-    var lon = (dzInfo && dzInfo.lon) || 0.641;
+  // a square Web-Mercator export centred on the chosen landing point.
+  var LP_HALF = 850; // Mercator metres each way (~1 km-ish view)
+
+  function getLandingCoords() {
+    if (landing) return landing;
+    return { lat: (dzInfo && dzInfo.lat) || 51.156, lon: (dzInfo && dzInfo.lon) || 0.641 };
+  }
+  function toMerc(lat, lon) {
     var R = 6378137;
-    var mx = R * lon * Math.PI / 180;
-    var my = R * Math.log(Math.tan(Math.PI / 4 + lat * Math.PI / 360));
-    var half = 850; // Mercator metres each way (~1km-ish on the ground here)
-    var bbox = (mx - half) + ',' + (my - half) + ',' + (mx + half) + ',' + (my + half);
+    return { mx: R * lon * Math.PI / 180, my: R * Math.log(Math.tan(Math.PI / 4 + lat * Math.PI / 360)) };
+  }
+  function satUrl() {
+    var ll = getLandingCoords();
+    var m = toMerc(ll.lat, ll.lon);
+    var bbox = (m.mx - LP_HALF) + ',' + (m.my - LP_HALF) + ',' + (m.mx + LP_HALF) + ',' + (m.my + LP_HALF);
     return 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/export?bbox=' +
       bbox + '&bboxSR=3857&imageSR=3857&size=280,280&format=png&f=image';
+  }
+  // Tap the satellite to set the real landing spot — re-centres and remembers it.
+  function onMapClick(e) {
+    var map = document.getElementById('lpMap');
+    if (!map) return;
+    var rect = map.getBoundingClientRect();
+    var fx = (e.clientX - rect.left) / rect.width;
+    var fy = (e.clientY - rect.top) / rect.height;
+    var m = toMerc(getLandingCoords().lat, getLandingCoords().lon);
+    var mx = m.mx - LP_HALF + fx * 2 * LP_HALF;
+    var my = m.my + LP_HALF - fy * 2 * LP_HALF;
+    var R = 6378137;
+    var lon = mx / R * 180 / Math.PI;
+    var lat = (2 * Math.atan(Math.exp(my / R)) - Math.PI / 2) * 180 / Math.PI;
+    landing = { lat: lat, lon: lon };
+    try { localStorage.setItem('hm_landLat', String(lat)); localStorage.setItem('hm_landLon', String(lon)); } catch (err) {}
+    renderLanding();
   }
 
   function renderLanding() {
@@ -2431,9 +2456,11 @@ a.card-plane-reg:hover, a.ac-reg:hover { text-decoration: underline; }
     }
     // Build the satellite + overlay shell once; only the SVG overlay re-renders.
     if (!host.querySelector('.lp-map')) {
-      host.innerHTML = '<div class="lp-map"><img class="lp-map-bg" id="lpMapImg" alt="Airfield">' +
+      host.innerHTML = '<div class="lp-map" id="lpMap" title="Tap to set the landing spot"><img class="lp-map-bg" id="lpMapImg" alt="Airfield">' +
         '<svg class="lp-overlay" id="lpSvg" viewBox="0 0 280 280"></svg></div>' +
+        '<div class="lp-hint">Tap the map to set the landing spot</div>' +
         '<div class="lp-caption" id="lpCaption"></div>';
+      document.getElementById('lpMap').addEventListener('click', onMapClick);
     }
     var img = document.getElementById('lpMapImg');
     var src = satUrl();
@@ -2688,6 +2715,10 @@ a.card-plane-reg:hover, a.ac-reg:hover { text-decoration: underline; }
   });
 
   // --- Init ---
+  try {
+    var _la = parseFloat(localStorage.getItem('hm_landLat')), _lo = parseFloat(localStorage.getItem('hm_landLon'));
+    if (!isNaN(_la) && !isNaN(_lo)) landing = { lat: _la, lon: _lo };
+  } catch (e) {}
   startPolling();
   fetchWeather();
   weatherTimer = setInterval(fetchWeather, 600000); // refresh weather every 10 min
