@@ -2414,9 +2414,11 @@ a.card-plane-reg:hover, a.ac-reg:hover { text-decoration: underline; }
   // a square Web-Mercator export centred on the chosen landing point.
   var LP_HALF = 850; // Mercator metres each way (~1 km-ish view)
 
+  // Headcorn's actual skydiving landing area (not the aerodrome centre the API
+  // reports). A tap on the map overrides this and is saved per device.
+  var DEFAULT_LANDING = { lat: 51.157670, lon: 0.652369 };
   function getLandingCoords() {
-    if (landing) return landing;
-    return { lat: (dzInfo && dzInfo.lat) || 51.156, lon: (dzInfo && dzInfo.lon) || 0.641 };
+    return landing || DEFAULT_LANDING;
   }
   function toMerc(lat, lon) {
     var R = 6378137;
