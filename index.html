@@ -220,10 +220,13 @@ body {
 
 /* Date picker: the real input is laid transparently over the button, so a tap
    opens the OS-native date picker directly (reliable on mobile, unlike showPicker). */
-.prevdays-wrap { position: relative; display: inline-flex; }
+.prevdays-label { position: relative; overflow: hidden; cursor: pointer; }
+/* The real date input fills the label transparently — tapping the label opens
+   the OS-native picker (reliable on iOS). No appearance:none (that disables it). */
 .date-input {
   position: absolute;
-  inset: 0;
+  left: 0;
+  top: 0;
   width: 100%;
   height: 100%;
   margin: 0;
@@ -231,8 +234,6 @@ body {
   border: 0;
   opacity: 0;
   cursor: pointer;
-  -webkit-appearance: none;
-  appearance: none;
 }
 .history-label {
   display: none;
@@ -1185,10 +1186,7 @@ a.card-plane-reg:hover, a.ac-reg:hover { text-decoration: underline; }
   <span style="width:1px;height:20px;background:var(--slate-200);margin:0 4px;"></span>
   <button class="filter-btn" data-filter="sports">Sports Only</button>
   <span style="width:1px;height:20px;background:var(--slate-200);margin:0 4px;"></span>
-  <span class="prevdays-wrap">
-    <button class="filter-btn" id="prevDaysBtn" tabindex="-1">&#128197; Previous Days</button>
-    <input type="date" id="datePicker" class="date-input" aria-label="Pick a date to view">
-  </span>
+  <label class="filter-btn prevdays-label" id="prevDaysBtn">&#128197; Previous Days<input type="date" id="datePicker" class="date-input" aria-label="Pick a date to view"></label>
   <span id="historyLabel" class="history-label"></span>
   <button class="filter-btn today-btn" id="todayBtn">&larr; Back to Today</button>
 </div>
@@ -2672,7 +2670,13 @@ a.card-plane-reg:hover, a.ac-reg:hover { text-decoration: underline; }
   // OS-native picker directly (works on mobile, where showPicker/focus don't).
   $datePicker.max = todayStr();
   $datePicker.value = todayStr();
-  $datePicker.addEventListener('focus', function() { $datePicker.max = todayStr(); });
+  // Desktop: a label tap doesn't drop the calendar, so nudge it with showPicker.
+  // Mobile: the native input tap already opens the OS picker (showPicker is a
+  // harmless no-op / caught).
+  $datePicker.addEventListener('click', function() {
+    $datePicker.max = todayStr();
+    if (typeof $datePicker.showPicker === 'function') { try { $datePicker.showPicker(); } catch (e) {} }
+  });
   $datePicker.addEventListener('change', function() { setDate($datePicker.value); });
   $todayBtn.addEventListener('click', function() { setDate(null); });
 
