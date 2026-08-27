@@ -893,6 +893,34 @@ a.card-plane-reg:hover, a.ac-reg:hover { text-decoration: underline; }
 
 .sidebar-badges { display: flex; gap: 4px; flex-shrink: 0; }
 
+/* Weather + landing pattern */
+.wx-panel { padding: 14px 16px; border-top: 1px solid var(--slate-100); }
+.wx-title { font-family: 'Barlow Condensed', sans-serif; font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 1px; color: var(--slate-500); margin-bottom: 8px; }
+.wx-row { display: flex; justify-content: space-between; align-items: baseline; font-size: 13px; padding: 3px 0; }
+.wx-lbl { color: var(--slate-500); }
+.wx-val { color: var(--slate-800); font-weight: 600; font-family: 'DM Mono', monospace; font-size: 12px; }
+.wx-aloft-title { font-family: 'Barlow Condensed', sans-serif; font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--slate-400); margin: 12px 0 4px; }
+.wx-aloft { width: 100%; border-collapse: collapse; font-family: 'DM Mono', monospace; font-size: 11px; }
+.wx-aloft th { text-align: left; color: var(--slate-400); font-weight: 600; font-size: 10px; text-transform: uppercase; padding: 2px 4px; border-bottom: 1px solid var(--slate-100); }
+.wx-aloft td { padding: 3px 4px; color: var(--slate-700); border-bottom: 1px solid var(--slate-50); white-space: nowrap; }
+.wx-muted { color: var(--slate-400); font-size: 12px; }
+.wx-lp-controls { display: flex; gap: 6px; margin-bottom: 8px; }
+.lp-hand-btn { flex: 1; font-family: 'Barlow Condensed', sans-serif; font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; padding: 5px; border: 1px solid var(--slate-200); background: white; color: var(--slate-500); border-radius: 5px; cursor: pointer; }
+.lp-hand-btn.active { background: var(--slate-800); color: white; border-color: var(--slate-800); }
+.lp-svg { width: 100%; max-width: 240px; display: block; margin: 2px auto; }
+.lp-ring { fill: #f0fdf4; stroke: var(--slate-200); stroke-width: 1; }
+.lp-card { font: 700 11px 'Barlow Condensed', sans-serif; fill: var(--slate-400); text-anchor: middle; }
+.lp-leg { fill: none; stroke-width: 2.5; }
+.lp-dash { stroke: var(--slate-400); stroke-dasharray: 4 3; }
+.lp-final { stroke: var(--green-500); }
+.lp-arrowhead { fill: var(--slate-500); }
+.lp-alt { font: 600 8px 'DM Mono', monospace; fill: var(--slate-500); text-anchor: middle; }
+.lp-target { fill: #ef4444; }
+.lp-wind { stroke: #2563eb; stroke-width: 2.5; }
+.lp-windhead { fill: #2563eb; }
+.lp-caption { font-size: 12px; color: var(--slate-600); text-align: center; margin-top: 6px; line-height: 1.45; }
+.lp-caption b { color: var(--slate-800); }
+
 .cam-badge {
   font-family: 'Barlow Condensed', sans-serif;
   font-weight: 700;
@@ -1133,6 +1161,16 @@ a.card-plane-reg:hover, a.ac-reg:hover { text-decoration: underline; }
     <div class="sidebar-list" id="sidebarList">
       <div class="empty-state">No active tandems</div>
     </div>
+    <div class="wx-panel">
+      <div class="wx-title">&#127788;&#65039; Weather</div>
+      <div id="wxContent"><div class="wx-muted">Loading&hellip;</div></div>
+      <div class="wx-title" style="margin-top:16px;">&#129517; Landing Pattern</div>
+      <div class="wx-lp-controls">
+        <button class="lp-hand-btn active" data-hand="left">Left-hand</button>
+        <button class="lp-hand-btn" data-hand="right">Right-hand</button>
+      </div>
+      <div id="wxLanding"><div class="wx-muted">&hellip;</div></div>
+    </div>
   </aside>
 </div>
 
@@ -1260,6 +1298,9 @@ a.card-plane-reg:hover, a.ac-reg:hover { text-decoration: underline; }
   let fetchFailed = false;   // true when every proxy in the chain failed to deliver the manifest
   let viewFilter = 'active'; // 'active' or 'all'
   let selectedDate = null;   // null = today (live); 'YYYY-MM-DD' = viewing a past day (read-only)
+  let weather = null;        // Open-Meteo forecast (ground + winds aloft)
+  let weatherTimer = null;
+  let landingHand = 'left';  // landing-pattern circuit direction
   let planesMap = {};       // planeId → { registration, planeName, maxWeightInLbs, capacity }
   let aircraftLive = {};    // registration → { alt_baro, gs, baro_rate, lat, lon, on_ground, seen }
   let dzInfo = null;        // { lat, lon, name } from /dropzones
@@ -2303,6 +2344,119 @@ a.card-plane-reg:hover, a.ac-reg:hover { text-decoration: underline; }
     }
   }
 
+  // --- Weather (Open-Meteo — CORS-open, no proxy needed) ---
+  var WX_LEVELS = ['925', '850', '700', '600']; // hPa: ~2.4k / 4.8k / 10k / 14k ft
+
+  function degToCardinal(d) {
+    var dirs = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE', 'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW'];
+    return dirs[Math.round((((d % 360) + 360) % 360) / 22.5) % 16];
+  }
+
+  async function fetchWeather() {
+    var lat = (dzInfo && dzInfo.lat) || 51.156;
+    var lon = (dzInfo && dzInfo.lon) || 0.641;
+    var fields = [];
+    ['wind_speed', 'wind_direction', 'temperature', 'geopotential_height'].forEach(function(f) {
+      WX_LEVELS.forEach(function(l) { fields.push(f + '_' + l + 'hPa'); });
+    });
+    var url = 'https://api.open-meteo.com/v1/forecast?latitude=' + lat + '&longitude=' + lon +
+      '&current=temperature_2m,wind_speed_10m,wind_direction_10m,wind_gusts_10m' +
+      '&hourly=' + fields.join(',') +
+      '&wind_speed_unit=kn&forecast_hours=1&timezone=auto';
+    try {
+      var r = await fetch(url);
+      if (!r.ok) throw new Error('wx ' + r.status);
+      weather = await r.json();
+      renderWeather();
+      renderLanding();
+    } catch (e) {
+      var el = document.getElementById('wxContent');
+      if (el && !weather) el.innerHTML = '<div class="wx-muted">Weather unavailable</div>';
+    }
+  }
+
+  function renderWeather() {
+    var el = document.getElementById('wxContent');
+    if (!el) return;
+    if (!weather || !weather.current) { el.innerHTML = '<div class="wx-muted">Loading&hellip;</div>'; return; }
+    var c = weather.current, h = weather.hourly || {};
+    var mph = function(kt) { return Math.round(kt * 1.15078); };
+    var gWind = c.wind_direction_10m != null
+      ? Math.round(c.wind_direction_10m) + '&deg; ' + degToCardinal(c.wind_direction_10m) + ' &middot; ' + mph(c.wind_speed_10m || 0) + ' mph' +
+        (c.wind_gusts_10m ? ' <span class="wx-muted">G' + mph(c.wind_gusts_10m) + '</span>' : '')
+      : '&mdash;';
+    var html = '<div class="wx-row"><span class="wx-lbl">Ground wind</span><span class="wx-val">' + gWind + '</span></div>' +
+      '<div class="wx-row"><span class="wx-lbl">Ground temp</span><span class="wx-val">' +
+        (c.temperature_2m != null ? Math.round(c.temperature_2m) + '&deg;C' : '&mdash;') + '</span></div>';
+
+    html += '<div class="wx-aloft-title">Winds aloft</div>' +
+      '<table class="wx-aloft"><thead><tr><th>Alt</th><th>Wind</th><th>Temp</th></tr></thead><tbody>';
+    // High to low, so the table reads top-of-climb downwards.
+    WX_LEVELS.slice().reverse().forEach(function(l) {
+      var gh = (h['geopotential_height_' + l + 'hPa'] || [])[0];
+      var wd = (h['wind_direction_' + l + 'hPa'] || [])[0];
+      var ws = (h['wind_speed_' + l + 'hPa'] || [])[0];
+      var tp = (h['temperature_' + l + 'hPa'] || [])[0];
+      if (gh == null) return;
+      var altFt = (Math.round(gh * 3.281 / 500) * 500).toLocaleString();
+      html += '<tr><td>' + altFt + ' ft</td><td>' + Math.round(wd) + '&deg; ' + Math.round(ws) + ' kt</td><td>' +
+        (tp != null ? Math.round(tp) + '&deg;' : '&mdash;') + '</td></tr>';
+    });
+    html += '</tbody></table>';
+    el.innerHTML = html;
+  }
+
+  function renderLanding() {
+    var el = document.getElementById('wxLanding');
+    if (!el) return;
+    if (!weather || !weather.current || weather.current.wind_direction_10m == null) {
+      el.innerHTML = '<div class="wx-muted">No wind data</div>';
+      return;
+    }
+    var windFrom = weather.current.wind_direction_10m;
+    var spd = Math.round((weather.current.wind_speed_10m || 0) * 1.15078); // mph
+    var landHdg = Math.round(windFrom);                                    // land into wind
+    var cx = 100, cy = 100;
+    var vec = function(b) { var r = b * Math.PI / 180; return [Math.sin(r), -Math.cos(r)]; };
+    var F = vec(landHdg);
+    var side = (landingHand === 'left') ? -1 : 1;
+    var P = vec(landHdg + 90);
+    var pt = function(fwd, sd) {
+      return [(cx + F[0] * fwd + P[0] * sd * side).toFixed(1), (cy + F[1] * fwd + P[1] * sd * side).toFixed(1)];
+    };
+    var T = [cx, cy];
+    var f1 = pt(-38, 0);    // start of final (300 ft)
+    var b1 = pt(-38, 44);   // base corner (600 ft)
+    var d1 = pt(34, 44);    // downwind end (1000 ft)
+    var wf = vec(windFrom);
+    var wTail = [(cx + wf[0] * 88).toFixed(1), (cy + wf[1] * 88).toFixed(1)];
+    var wHead = [(cx + wf[0] * 60).toFixed(1), (cy + wf[1] * 60).toFixed(1)];
+
+    var svg = '<svg viewBox="0 0 200 200" class="lp-svg">' +
+      '<defs>' +
+        '<marker id="lpArrow" markerWidth="7" markerHeight="7" refX="5" refY="3.5" orient="auto"><path d="M0,0 L7,3.5 L0,7 z" class="lp-arrowhead"/></marker>' +
+        '<marker id="lpWind" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" class="lp-windhead"/></marker>' +
+      '</defs>' +
+      '<circle cx="100" cy="100" r="94" class="lp-ring"/>' +
+      '<text x="100" y="17" class="lp-card">N</text>' +
+      '<text x="187" y="104" class="lp-card">E</text>' +
+      '<text x="100" y="196" class="lp-card">S</text>' +
+      '<text x="13" y="104" class="lp-card">W</text>' +
+      '<polyline points="' + d1[0] + ',' + d1[1] + ' ' + b1[0] + ',' + b1[1] + '" class="lp-leg lp-dash" marker-end="url(#lpArrow)"/>' +
+      '<polyline points="' + b1[0] + ',' + b1[1] + ' ' + f1[0] + ',' + f1[1] + '" class="lp-leg lp-dash" marker-end="url(#lpArrow)"/>' +
+      '<polyline points="' + f1[0] + ',' + f1[1] + ' ' + T[0] + ',' + T[1] + '" class="lp-leg lp-final" marker-end="url(#lpArrow)"/>' +
+      '<text x="' + d1[0] + '" y="' + (parseFloat(d1[1]) - 5) + '" class="lp-alt">1000</text>' +
+      '<text x="' + b1[0] + '" y="' + (parseFloat(b1[1]) - 5) + '" class="lp-alt">600</text>' +
+      '<text x="' + f1[0] + '" y="' + (parseFloat(f1[1]) - 5) + '" class="lp-alt">300</text>' +
+      '<circle cx="100" cy="100" r="4" class="lp-target"/>' +
+      '<line x1="' + wTail[0] + '" y1="' + wTail[1] + '" x2="' + wHead[0] + '" y2="' + wHead[1] + '" class="lp-wind" marker-end="url(#lpWind)"/>' +
+      '</svg>';
+    var pad = function(n) { return ('00' + n).slice(-3); };
+    svg += '<div class="lp-caption">Land into wind &mdash; heading <b>' + pad(landHdg) + '&deg;</b><br>' +
+      'Wind from ' + degToCardinal(windFrom) + ' (' + pad(Math.round(windFrom)) + '&deg;) at ' + spd + ' mph</div>';
+    el.innerHTML = svg;
+  }
+
   // --- Polling ---
   // --- Realtime (Ably SSE — native EventStream, no SDK) ---
   // The DZ publishes to an Ably channel "manifesting:<dzId>" whenever a load
@@ -2502,8 +2656,21 @@ a.card-plane-reg:hover, a.ac-reg:hover { text-decoration: underline; }
     fetchData();
   });
 
+  // --- Landing pattern hand toggle ---
+  document.querySelectorAll('.lp-hand-btn').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      landingHand = this.getAttribute('data-hand');
+      document.querySelectorAll('.lp-hand-btn').forEach(function(b) {
+        b.classList.toggle('active', b.getAttribute('data-hand') === landingHand);
+      });
+      renderLanding();
+    });
+  });
+
   // --- Init ---
   startPolling();
+  fetchWeather();
+  weatherTimer = setInterval(fetchWeather, 600000); // refresh weather every 10 min
 })();
 </script>
 </body>
