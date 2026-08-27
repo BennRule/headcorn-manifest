@@ -907,17 +907,19 @@ a.card-plane-reg:hover, a.ac-reg:hover { text-decoration: underline; }
 .wx-lp-controls { display: flex; gap: 6px; margin-bottom: 8px; }
 .lp-hand-btn { flex: 1; font-family: 'Barlow Condensed', sans-serif; font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; padding: 5px; border: 1px solid var(--slate-200); background: white; color: var(--slate-500); border-radius: 5px; cursor: pointer; }
 .lp-hand-btn.active { background: var(--slate-800); color: white; border-color: var(--slate-800); }
-.lp-svg { width: 100%; max-width: 240px; display: block; margin: 2px auto; }
-.lp-ring { fill: #f0fdf4; stroke: var(--slate-200); stroke-width: 1; }
-.lp-card { font: 700 11px 'Barlow Condensed', sans-serif; fill: var(--slate-400); text-anchor: middle; }
-.lp-leg { fill: none; stroke-width: 2.5; }
-.lp-dash { stroke: var(--slate-400); stroke-dasharray: 4 3; }
-.lp-final { stroke: var(--green-500); }
-.lp-arrowhead { fill: var(--slate-500); }
-.lp-alt { font: 600 8px 'DM Mono', monospace; fill: var(--slate-500); text-anchor: middle; }
-.lp-target { fill: #ef4444; }
-.lp-wind { stroke: #2563eb; stroke-width: 2.5; }
-.lp-windhead { fill: #2563eb; }
+.lp-map { position: relative; width: 100%; max-width: 280px; margin: 2px auto; aspect-ratio: 1 / 1; border-radius: 8px; overflow: hidden; border: 1px solid var(--slate-200); background: var(--slate-100); }
+.lp-map-bg { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; }
+.lp-overlay { position: absolute; inset: 0; width: 100%; height: 100%; }
+.lp-leg { fill: none; stroke-width: 3; }
+.lp-dash { stroke: #ffffff; stroke-dasharray: 5 4; }
+.lp-final { stroke: #22c55e; }
+.lp-arrowhead { fill: #ffffff; }
+.lp-finalhead { fill: #22c55e; }
+.lp-alt { font: 700 11px 'DM Mono', monospace; fill: #ffffff; stroke: rgba(0,0,0,0.75); stroke-width: 2.5; paint-order: stroke; text-anchor: middle; }
+.lp-target { fill: #ef4444; stroke: #fff; stroke-width: 1.5; }
+.lp-wind { stroke: #38bdf8; stroke-width: 3.5; }
+.lp-windhead { fill: #38bdf8; }
+.lp-n { font: 700 14px 'Barlow Condensed', sans-serif; fill: #fff; stroke: rgba(0,0,0,0.65); stroke-width: 2; paint-order: stroke; }
 .lp-caption { font-size: 12px; color: var(--slate-600); text-align: center; margin-top: 6px; line-height: 1.45; }
 .lp-caption b { color: var(--slate-800); }
 
@@ -2406,55 +2408,73 @@ a.card-plane-reg:hover, a.ac-reg:hover { text-decoration: underline; }
     el.innerHTML = html;
   }
 
+  // Free satellite image of the DZ (Esri World Imagery, no API key, CORS-open),
+  // as a square Web-Mercator export centred on the dropzone.
+  function satUrl() {
+    var lat = (dzInfo && dzInfo.lat) || 51.156;
+    var lon = (dzInfo && dzInfo.lon) || 0.641;
+    var R = 6378137;
+    var mx = R * lon * Math.PI / 180;
+    var my = R * Math.log(Math.tan(Math.PI / 4 + lat * Math.PI / 360));
+    var half = 850; // Mercator metres each way (~1km-ish on the ground here)
+    var bbox = (mx - half) + ',' + (my - half) + ',' + (mx + half) + ',' + (my + half);
+    return 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/export?bbox=' +
+      bbox + '&bboxSR=3857&imageSR=3857&size=280,280&format=png&f=image';
+  }
+
   function renderLanding() {
-    var el = document.getElementById('wxLanding');
-    if (!el) return;
+    var host = document.getElementById('wxLanding');
+    if (!host) return;
     if (!weather || !weather.current || weather.current.wind_direction_10m == null) {
-      el.innerHTML = '<div class="wx-muted">No wind data</div>';
+      host.innerHTML = '<div class="wx-muted">No wind data</div>';
       return;
     }
+    // Build the satellite + overlay shell once; only the SVG overlay re-renders.
+    if (!host.querySelector('.lp-map')) {
+      host.innerHTML = '<div class="lp-map"><img class="lp-map-bg" id="lpMapImg" alt="Airfield">' +
+        '<svg class="lp-overlay" id="lpSvg" viewBox="0 0 280 280"></svg></div>' +
+        '<div class="lp-caption" id="lpCaption"></div>';
+    }
+    var img = document.getElementById('lpMapImg');
+    var src = satUrl();
+    if (img.getAttribute('data-src') !== src) { img.src = src; img.setAttribute('data-src', src); }
+
     var windFrom = weather.current.wind_direction_10m;
     var spd = Math.round((weather.current.wind_speed_10m || 0) * 1.15078); // mph
     var landHdg = Math.round(windFrom);                                    // land into wind
-    var cx = 100, cy = 100;
+    var cx = 140, cy = 140;
     var vec = function(b) { var r = b * Math.PI / 180; return [Math.sin(r), -Math.cos(r)]; };
-    var F = vec(landHdg);
+    var F = vec(landHdg), P = vec(landHdg + 90);
     var side = (landingHand === 'left') ? -1 : 1;
-    var P = vec(landHdg + 90);
     var pt = function(fwd, sd) {
       return [(cx + F[0] * fwd + P[0] * sd * side).toFixed(1), (cy + F[1] * fwd + P[1] * sd * side).toFixed(1)];
     };
     var T = [cx, cy];
-    var f1 = pt(-38, 0);    // start of final (300 ft)
-    var b1 = pt(-38, 44);   // base corner (600 ft)
-    var d1 = pt(34, 44);    // downwind end (1000 ft)
+    var f1 = pt(-52, 0);    // start of final (300 ft)
+    var b1 = pt(-52, 60);   // base corner (600 ft)
+    var d1 = pt(46, 60);    // downwind end (1000 ft)
     var wf = vec(windFrom);
-    var wTail = [(cx + wf[0] * 88).toFixed(1), (cy + wf[1] * 88).toFixed(1)];
-    var wHead = [(cx + wf[0] * 60).toFixed(1), (cy + wf[1] * 60).toFixed(1)];
+    var wTail = [(cx + wf[0] * 122).toFixed(1), (cy + wf[1] * 122).toFixed(1)];
+    var wHead = [(cx + wf[0] * 92).toFixed(1), (cy + wf[1] * 92).toFixed(1)];
+    var pad = function(n) { return ('00' + n).slice(-3); };
 
-    var svg = '<svg viewBox="0 0 200 200" class="lp-svg">' +
-      '<defs>' +
+    var svg = '<defs>' +
         '<marker id="lpArrow" markerWidth="7" markerHeight="7" refX="5" refY="3.5" orient="auto"><path d="M0,0 L7,3.5 L0,7 z" class="lp-arrowhead"/></marker>' +
+        '<marker id="lpArrowG" markerWidth="7" markerHeight="7" refX="5" refY="3.5" orient="auto"><path d="M0,0 L7,3.5 L0,7 z" class="lp-finalhead"/></marker>' +
         '<marker id="lpWind" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" class="lp-windhead"/></marker>' +
       '</defs>' +
-      '<circle cx="100" cy="100" r="94" class="lp-ring"/>' +
-      '<text x="100" y="17" class="lp-card">N</text>' +
-      '<text x="187" y="104" class="lp-card">E</text>' +
-      '<text x="100" y="196" class="lp-card">S</text>' +
-      '<text x="13" y="104" class="lp-card">W</text>' +
+      '<text x="12" y="22" class="lp-n">N&#8593;</text>' +
       '<polyline points="' + d1[0] + ',' + d1[1] + ' ' + b1[0] + ',' + b1[1] + '" class="lp-leg lp-dash" marker-end="url(#lpArrow)"/>' +
       '<polyline points="' + b1[0] + ',' + b1[1] + ' ' + f1[0] + ',' + f1[1] + '" class="lp-leg lp-dash" marker-end="url(#lpArrow)"/>' +
-      '<polyline points="' + f1[0] + ',' + f1[1] + ' ' + T[0] + ',' + T[1] + '" class="lp-leg lp-final" marker-end="url(#lpArrow)"/>' +
-      '<text x="' + d1[0] + '" y="' + (parseFloat(d1[1]) - 5) + '" class="lp-alt">1000</text>' +
-      '<text x="' + b1[0] + '" y="' + (parseFloat(b1[1]) - 5) + '" class="lp-alt">600</text>' +
-      '<text x="' + f1[0] + '" y="' + (parseFloat(f1[1]) - 5) + '" class="lp-alt">300</text>' +
-      '<circle cx="100" cy="100" r="4" class="lp-target"/>' +
-      '<line x1="' + wTail[0] + '" y1="' + wTail[1] + '" x2="' + wHead[0] + '" y2="' + wHead[1] + '" class="lp-wind" marker-end="url(#lpWind)"/>' +
-      '</svg>';
-    var pad = function(n) { return ('00' + n).slice(-3); };
-    svg += '<div class="lp-caption">Land into wind &mdash; heading <b>' + pad(landHdg) + '&deg;</b><br>' +
-      'Wind from ' + degToCardinal(windFrom) + ' (' + pad(Math.round(windFrom)) + '&deg;) at ' + spd + ' mph</div>';
-    el.innerHTML = svg;
+      '<polyline points="' + f1[0] + ',' + f1[1] + ' ' + T[0] + ',' + T[1] + '" class="lp-leg lp-final" marker-end="url(#lpArrowG)"/>' +
+      '<text x="' + d1[0] + '" y="' + (parseFloat(d1[1]) - 6) + '" class="lp-alt">1000</text>' +
+      '<text x="' + b1[0] + '" y="' + (parseFloat(b1[1]) - 6) + '" class="lp-alt">600</text>' +
+      '<text x="' + f1[0] + '" y="' + (parseFloat(f1[1]) - 6) + '" class="lp-alt">300</text>' +
+      '<circle cx="140" cy="140" r="5" class="lp-target"/>' +
+      '<line x1="' + wTail[0] + '" y1="' + wTail[1] + '" x2="' + wHead[0] + '" y2="' + wHead[1] + '" class="lp-wind" marker-end="url(#lpWind)"/>';
+    document.getElementById('lpSvg').innerHTML = svg;
+    document.getElementById('lpCaption').innerHTML = 'Land into wind &mdash; heading <b>' + pad(landHdg) + '&deg;</b><br>' +
+      'Wind from ' + degToCardinal(windFrom) + ' (' + pad(Math.round(windFrom)) + '&deg;) at ' + spd + ' mph';
   }
 
   // --- Polling ---
