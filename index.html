@@ -1272,9 +1272,9 @@ a.card-plane-reg:hover, a.ac-reg:hover { text-decoration: underline; }
   const DEFAULT_PROXY = '';
   const BASE_URL = 'https://dz.goskydive.com';
 
-  // Paste your deployed Cloudflare Worker URL here (see worker.js), or leave it
-  // blank and set it in Settings instead. Must end with the ?url= param.
-  const WORKER_PROXY = '';
+  // Deployed Cloudflare Worker (see worker.js) — reliable CORS proxy for the
+  // GoSkydive API and realtime token. Locked to dz.goskydive.com / api.adsb.lol.
+  const WORKER_PROXY = 'https://headcorn-proxy.headcorn-manifest.workers.dev/?url=';
   // Ordered fallback chain tried after the user's Settings override. corsproxy.io
   // is last because its free tier has become unreliable (403s, 200 challenge pages).
   const FALLBACK_PROXIES = [

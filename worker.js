@@ -34,8 +34,24 @@ export default {
       return new Response('Missing ?url= parameter', { status: 400, headers: CORS_HEADERS });
     }
 
+    // Only proxy the hosts this wallboard needs — so publishing the Worker URL
+    // can't turn it into a general-purpose open proxy for anyone to abuse.
+    const ALLOWED_HOSTS = ['dz.goskydive.com', 'api.adsb.lol'];
+    let targetUrl;
+    try { targetUrl = new URL(target); } catch (e) {
+      return new Response('Invalid ?url=', { status: 400, headers: CORS_HEADERS });
+    }
+    if (!ALLOWED_HOSTS.includes(targetUrl.hostname)) {
+      return new Response('Host not allowed', { status: 403, headers: CORS_HEADERS });
+    }
+
     // Forward to the target, preserving the Authorization (Basic) header.
-    const fwdHeaders = new Headers({ 'Accept': 'application/json' });
+    // A descriptive User-Agent — some upstreams (e.g. adsb.lol) reject the
+    // default/blank UA that Cloudflare Workers send and return 403 otherwise.
+    const fwdHeaders = new Headers({
+      'Accept': 'application/json',
+      'User-Agent': 'HeadcornManifestWallboard/1.0 (+https://bennrule.github.io/headcorn-manifest)'
+    });
     const auth = request.headers.get('Authorization');
     if (auth) fwdHeaders.set('Authorization', auth);
 
