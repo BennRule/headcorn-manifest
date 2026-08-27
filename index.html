@@ -217,6 +217,22 @@ body {
 
 .filter-btn:hover { background: var(--slate-50); color: var(--slate-700); }
 
+/* Date picker (hidden input triggered by the Previous Days button) */
+.date-input { position: absolute; opacity: 0; width: 1px; height: 1px; pointer-events: none; }
+.history-label {
+  display: none;
+  align-items: center;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 600;
+  font-size: 13px;
+  letter-spacing: 0.5px;
+  color: #92400e;
+  background: var(--amber-100);
+  padding: 3px 10px;
+  border-radius: 6px;
+}
+.today-btn { display: none; }
+
 .filter-btn.active {
   background: var(--slate-900);
   color: white;
@@ -1153,6 +1169,11 @@ a.card-plane-reg:hover, a.ac-reg:hover { text-decoration: underline; }
   <button class="filter-btn" data-filter="all">All Loads</button>
   <span style="width:1px;height:20px;background:var(--slate-200);margin:0 4px;"></span>
   <button class="filter-btn" data-filter="sports">Sports Only</button>
+  <span style="width:1px;height:20px;background:var(--slate-200);margin:0 4px;"></span>
+  <button class="filter-btn" id="prevDaysBtn">&#128197; Previous Days</button>
+  <input type="date" id="datePicker" class="date-input" aria-label="Pick a date">
+  <span id="historyLabel" class="history-label"></span>
+  <button class="filter-btn today-btn" id="todayBtn">&larr; Back to Today</button>
 </div>
 
 <!-- Aircraft bar -->
@@ -1319,6 +1340,7 @@ a.card-plane-reg:hover, a.ac-reg:hover { text-decoration: underline; }
   let lastUpdateTime = null;
   let fetchFailed = false;   // true when every proxy in the chain failed to deliver the manifest
   let viewFilter = 'active'; // 'active' or 'all'
+  let selectedDate = null;   // null = today (live); 'YYYY-MM-DD' = viewing a past day (read-only)
   let planesMap = {};       // planeId → { registration, planeName, maxWeightInLbs, capacity }
   let aircraftLive = {};    // registration → { alt_baro, gs, baro_rate, lat, lon, on_ground, seen }
   let dzInfo = null;        // { lat, lon, name } from /dropzones
@@ -1374,6 +1396,14 @@ a.card-plane-reg:hover, a.ac-reg:hover { text-decoration: underline; }
     return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
   }
 
+  // The date currently being shown — today when live, or the picked past day.
+  function activeDate() { return selectedDate || todayStr(); }
+
+  function fmtDateLabel(ds) {
+    var d = new Date(ds + 'T00:00:00');
+    return d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
+  }
+
   // Ordered list of proxies to try: the Settings override first (if set), then
   // the built-in fallback chain. Blanks dropped, duplicates removed.
   function proxyChain() {
@@ -1423,8 +1453,8 @@ a.card-plane-reg:hover, a.ac-reg:hover { text-decoration: underline; }
     // is silently ignored and returns an unrelated default set (see the live
     // wallboard's own request). limit/archived_status match that request too.
     var manifestUrl = BASE_URL + '/manifests?dropzone_id_eq=' + config.dzId +
-      '&manifest_date_eq=' + todayStr() + '&limit=50&archived_status=active';
-    var weatherUrl = BASE_URL + '/calendar/weather-holds?dropzone_id=' + config.dzId + '&date=' + todayStr();
+      '&manifest_date_eq=' + activeDate() + '&limit=50&archived_status=active';
+    var weatherUrl = BASE_URL + '/calendar/weather-holds?dropzone_id=' + config.dzId + '&date=' + activeDate();
     var planesUrl = BASE_URL + '/planes?dropzone_id=' + config.dzId;
     var dzUrl = BASE_URL + '/dropzones';
 
@@ -1447,7 +1477,7 @@ a.card-plane-reg:hover, a.ac-reg:hover { text-decoration: underline; }
     try {
       if (manifestData.message) throw new Error('Manifest API: ' + manifestData.message);
 
-      var today = todayStr();
+      var today = activeDate();
       manifests = (manifestData.manifestCollection || []).filter(function(m) {
         return m.dropzoneId === config.dzId && m.manifestDate === today;
       });
@@ -1516,16 +1546,16 @@ a.card-plane-reg:hover, a.ac-reg:hover { text-decoration: underline; }
 
       fetchFailed = false;
       lastUpdateTime = new Date();
-      setStatus('ok', realtimeConnected ? '⚡ Live' : 'Live');
-
-      // Check for status changes and notify
-      checkNotifications(manifests);
+      setStatus('ok', selectedDate ? 'History' : (realtimeConnected ? '⚡ Live' : 'Live'));
 
       render();
 
-      // Fire aircraft tracking (non-blocking)
-      fetchAircraftTracking();
-      updateAircraftPollTimer();
+      // Live-only: notifications and aircraft tracking make no sense for a past day.
+      if (!selectedDate) {
+        checkNotifications(manifests);
+        fetchAircraftTracking();
+        updateAircraftPollTimer();
+      }
     } catch (err) {
       // Connected, but the API rejected us (e.g. bad key) — not a proxy failure.
       fetchFailed = false;
@@ -1958,8 +1988,8 @@ a.card-plane-reg:hover, a.ac-reg:hover { text-decoration: underline; }
         // All proxies exhausted — don't pretend the dropzone is just quiet.
         msg = 'Connection failed — couldn\'t reach the manifest service. Check the proxy in Settings.';
       } else if (manifests.length === 0) {
-        // Connected, but nothing on the manifest at all today.
-        msg = 'No loads on the manifest today';
+        // Connected, but nothing on the manifest at all for this day.
+        msg = selectedDate ? 'No loads on the manifest for ' + fmtDateLabel(selectedDate) : 'No loads on the manifest today';
       } else if (viewFilter === 'active') {
         // Connected with loads, just none currently active.
         msg = 'No active loads — switch to "All Loads" to see landed lifts';
@@ -2604,14 +2634,56 @@ a.card-plane-reg:hover, a.ac-reg:hover { text-decoration: underline; }
   });
 
   // --- Filter buttons ---
-  document.querySelectorAll('.filter-btn').forEach(function(btn) {
-    btn.addEventListener('click', function() {
-      viewFilter = this.getAttribute('data-filter');
-      document.querySelectorAll('.filter-btn').forEach(function(b) { b.classList.remove('active'); });
-      this.classList.add('active');
-      renderLoads();
+  function applyFilter(f) {
+    viewFilter = f;
+    document.querySelectorAll('.filter-btn[data-filter]').forEach(function(b) {
+      b.classList.toggle('active', b.getAttribute('data-filter') === f);
     });
+    renderLoads();
+  }
+  document.querySelectorAll('.filter-btn[data-filter]').forEach(function(btn) {
+    btn.addEventListener('click', function() { applyFilter(this.getAttribute('data-filter')); });
   });
+
+  // --- Date navigation (browse past days) ---
+  var $prevDaysBtn = document.getElementById('prevDaysBtn');
+  var $datePicker = document.getElementById('datePicker');
+  var $historyLabel = document.getElementById('historyLabel');
+  var $todayBtn = document.getElementById('todayBtn');
+
+  $prevDaysBtn.addEventListener('click', function() {
+    $datePicker.max = todayStr();
+    $datePicker.value = activeDate();
+    if (typeof $datePicker.showPicker === 'function') { try { $datePicker.showPicker(); return; } catch (e) {} }
+    $datePicker.focus();
+  });
+  $datePicker.addEventListener('change', function() { setDate($datePicker.value); });
+  $todayBtn.addEventListener('click', function() { setDate(null); });
+
+  function setDate(ds) {
+    if (!ds || ds === todayStr()) {
+      if (selectedDate === null) return;       // already live
+      selectedDate = null;
+      $historyLabel.style.display = 'none';
+      $todayBtn.style.display = 'none';
+      $prevDaysBtn.classList.remove('active');
+      applyFilter('active');
+      startPolling();                          // resume live fetch + realtime
+    } else {
+      selectedDate = ds;
+      $historyLabel.textContent = fmtDateLabel(ds);
+      $historyLabel.style.display = 'inline-flex';
+      $todayBtn.style.display = 'inline-block';
+      $prevDaysBtn.classList.add('active');
+      // Freeze live updates while browsing history.
+      if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+      stopRealtime();
+      if (aircraftPollTimer) { clearInterval(aircraftPollTimer); aircraftPollTimer = null; }
+      aircraftLive = {};                        // clear any live aircraft from bar/map
+      applyFilter('all');                       // past days are all landed
+      fetchData();
+    }
+  }
 
   // --- Fullscreen map ---
   var fullMapOpen = false;
