@@ -197,7 +197,8 @@ body {
   border-bottom: 1px solid var(--slate-200);
   display: flex;
   align-items: center;
-  gap: 4px;
+  flex-wrap: wrap;   /* wrap onto a second row on narrow screens so nothing (e.g. Back to Today) is cut off */
+  gap: 6px 4px;
 }
 
 .filter-btn {
@@ -217,8 +218,22 @@ body {
 
 .filter-btn:hover { background: var(--slate-50); color: var(--slate-700); }
 
-/* Date picker (hidden input triggered by the Previous Days button) */
-.date-input { position: absolute; opacity: 0; width: 1px; height: 1px; pointer-events: none; }
+/* Date picker: the real input is laid transparently over the button, so a tap
+   opens the OS-native date picker directly (reliable on mobile, unlike showPicker). */
+.prevdays-wrap { position: relative; display: inline-flex; }
+.date-input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  opacity: 0;
+  cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
+}
 .history-label {
   display: none;
   align-items: center;
@@ -1170,8 +1185,10 @@ a.card-plane-reg:hover, a.ac-reg:hover { text-decoration: underline; }
   <span style="width:1px;height:20px;background:var(--slate-200);margin:0 4px;"></span>
   <button class="filter-btn" data-filter="sports">Sports Only</button>
   <span style="width:1px;height:20px;background:var(--slate-200);margin:0 4px;"></span>
-  <button class="filter-btn" id="prevDaysBtn">&#128197; Previous Days</button>
-  <input type="date" id="datePicker" class="date-input" aria-label="Pick a date">
+  <span class="prevdays-wrap">
+    <button class="filter-btn" id="prevDaysBtn" tabindex="-1">&#128197; Previous Days</button>
+    <input type="date" id="datePicker" class="date-input" aria-label="Pick a date to view">
+  </span>
   <span id="historyLabel" class="history-label"></span>
   <button class="filter-btn today-btn" id="todayBtn">&larr; Back to Today</button>
 </div>
@@ -2651,12 +2668,11 @@ a.card-plane-reg:hover, a.ac-reg:hover { text-decoration: underline; }
   var $historyLabel = document.getElementById('historyLabel');
   var $todayBtn = document.getElementById('todayBtn');
 
-  $prevDaysBtn.addEventListener('click', function() {
-    $datePicker.max = todayStr();
-    $datePicker.value = activeDate();
-    if (typeof $datePicker.showPicker === 'function') { try { $datePicker.showPicker(); return; } catch (e) {} }
-    $datePicker.focus();
-  });
+  // The transparent date input sits over the button, so tapping it opens the
+  // OS-native picker directly (works on mobile, where showPicker/focus don't).
+  $datePicker.max = todayStr();
+  $datePicker.value = todayStr();
+  $datePicker.addEventListener('focus', function() { $datePicker.max = todayStr(); });
   $datePicker.addEventListener('change', function() { setDate($datePicker.value); });
   $todayBtn.addEventListener('click', function() { setDate(null); });
 
@@ -2664,6 +2680,7 @@ a.card-plane-reg:hover, a.ac-reg:hover { text-decoration: underline; }
     if (!ds || ds === todayStr()) {
       if (selectedDate === null) return;       // already live
       selectedDate = null;
+      $datePicker.value = todayStr();
       $historyLabel.style.display = 'none';
       $todayBtn.style.display = 'none';
       $prevDaysBtn.classList.remove('active');
